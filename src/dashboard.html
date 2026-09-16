@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atoll</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #fffefb; --ink: #1d2320; --muted: #69716c; --faint: #a3aaa5;
+    --line: #e3e1da; --line-strong: #cfccc2; --accent: #0f766e; --accent-soft: #e0f0ed;
+    --ok: #15803d; --ok-soft: #e3f3e7; --bad: #b42318; --bad-soft: #fbe9e7; --warn: #a15c07; --warn-soft: #fbf0dc;
+    --info: #3f5ea8; --info-soft: #e7ecf8; --add: #e6f4ea; --del: #fbeaea;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", "Pretendard", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111413; --panel: #171b19; --ink: #e6e9e7; --muted: #99a19c; --faint: #6c746f;
+      --line: #262c29; --line-strong: #353c38; --accent: #5ec2b5; --accent-soft: #16302c;
+      --ok: #6fd08c; --ok-soft: #17291d; --bad: #f1897d; --bad-soft: #32191a; --warn: #e5b061; --warn-soft: #2e2415;
+      --info: #9bb3f0; --info-soft: #1b2338; --add: #15291b; --del: #2d1718;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13.5px/1.5 var(--sans); }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  code, .mono { font-family: var(--mono); font-size: 12px; }
+  header { display: flex; align-items: center; gap: 18px; padding: 12px 22px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: -0.01em; font-size: 15px; }
+  .brand svg { color: var(--accent); }
+  .meta { color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .meta b { color: var(--ink); font-weight: 550; }
+  .spacer { flex: 1; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); display: inline-block; margin-right: 6px; vertical-align: 1px; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+  .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: calc(100vh - 53px); }
+  aside { border-right: 1px solid var(--line); padding: 16px 12px; }
+  aside h2, .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; margin: 0 0 8px 8px; }
+  .scn { display: flex; justify-content: space-between; align-items: baseline; width: 100%; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+  .scn:hover { background: var(--line); }
+  .scn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .scn small { color: var(--muted); font-family: var(--mono); font-size: 11px; font-weight: 400; }
+  .new-scn { display: flex; gap: 6px; margin: 12px 4px 0; }
+  .new-scn input { flex: 1; min-width: 0; }
+  main { padding: 20px 26px 60px; min-width: 0; }
+  .title-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .title-row h1 { font-size: 22px; letter-spacing: -0.02em; margin: 0; font-weight: 650; }
+  .step-badge { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+  .counts { display: flex; gap: 16px; color: var(--muted); flex-wrap: wrap; }
+  .counts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .job { color: var(--warn); }
+  input[type=text], input[type=password], textarea { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 7px; padding: 7px 10px; outline: none; }
+  input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 550; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.danger { color: var(--bad); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .ask-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 22px; }
+  .ask-form { align-items: stretch; }
+  .ask-form textarea { resize: vertical; min-height: 58px; height: 58px; line-height: 1.45; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  @media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } header { flex-wrap: wrap; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .timeline { position: relative; }
+  .item { padding: 13px 16px; border-bottom: 1px solid var(--line); }
+  .item:last-child { border-bottom: 0; }
+  .item-head { display: flex; gap: 10px; align-items: baseline; }
+  .item-head .sum { font-weight: 550; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .when { color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pill { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; font-family: var(--mono); }
+  .pill.accepted, .pill.addressed, .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.rejected, .pill.failed, .pill.stale, .pill.error { background: var(--bad-soft); color: var(--bad); }
+  .pill.pending, .pill.running, .pill.held, .pill.in_progress { background: var(--warn-soft); color: var(--warn); }
+  .pill.noop, .pill.skipped, .pill.open { background: var(--line); color: var(--muted); }
+  .pill.ask, .pill.report, .pill.implicit, .pill.rollback { background: var(--info-soft); color: var(--info); }
+  .sub { color: var(--muted); font-size: 12.5px; margin-top: 4px; overflow-wrap: anywhere; }
+  .reason { margin-top: 6px; font-size: 12.5px; overflow-wrap: anywhere; }
+  .score { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .bar { width: 54px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .actions { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12.5px; user-select: none; }
+  summary:hover { color: var(--ink); }
+  .changes { list-style: none; padding: 0; margin: 8px 0; font-family: var(--mono); font-size: 12px; }
+  .changes li { padding: 1px 0; }
+  .verdicts { margin: 8px 0; padding: 0; list-style: none; font-size: 12.5px; }
+  .verdicts li { margin: 4px 0; overflow-wrap: anywhere; }
+  pre.diff { margin: 8px 0 0; padding: 10px 0; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; overflow-x: auto; font: 11.5px/1.55 var(--mono); max-height: 460px; }
+  pre.diff span { display: block; padding: 0 12px; white-space: pre; }
+  pre.diff .a { background: var(--add); }
+  pre.diff .d { background: var(--del); }
+  pre.diff .h { color: var(--info); }
+  pre.diff .f { color: var(--muted); font-weight: 600; }
+  .tabs { display: flex; gap: 4px; padding: 8px 8px 0; border-bottom: 1px solid var(--line); }
+  .tab { border: 0; background: none; padding: 7px 11px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 550; }
+  .quote { margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--line-strong); overflow-wrap: anywhere; white-space: pre-wrap; max-height: 9em; overflow: hidden; }
+  .quote.assistant { color: var(--muted); }
+  .inline-report { display: flex; gap: 6px; margin-top: 8px; }
+  .inline-report input { flex: 1; min-width: 0; padding: 4px 8px; }
+  .empty { padding: 26px 16px; color: var(--muted); text-align: center; }
+  .copy { cursor: pointer; border-bottom: 1px dotted var(--faint); }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .15s; pointer-events: none; max-width: 90vw; }
+  .toast.show { opacity: 1; }
+  .login { max-width: 360px; margin: 12vh auto; padding: 24px; }
+  .login p { color: var(--muted); }
+  .login form { display: flex; gap: 8px; }
+  .login input { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="3.2" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.2 1.6"/></svg>
+    atoll
+  </div>
+  <div class="meta" id="meta"></div>
+  <div class="spacer"></div>
+  <div class="meta"><span><span class="dot" id="live"></span><span id="live-label">offline</span></span></div>
+</header>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<script>
+const DEFAULT_TOKEN = '__ATOLL_DEFAULT_TOKEN__';
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+let token = store.get('atoll-token') || DEFAULT_TOKEN;
+let current = store.get('atoll-scenario');
+let tab = 'feedback';
+let health = null;
+
+const $ = (sel) => document.querySelector(sel);
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'class') el.className = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children.flat()) if (c != null && c !== false) el.append(c instanceof Node ? c : String(c));
+  return el;
+}
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function ago(iso) {
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return new Date(iso).toISOString().slice(0, 10);
+}
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { authorization: `Bearer ${token}`, 'x-atoll-scenario': current || '', 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (res.status === 401) { showLogin(); throw new Error('unauthorized'); }
+  if (!res.ok) throw new Error(json.error + (json.details ? ` — ${[].concat(json.details).join('; ')}` : ''));
+  return json;
+}
+async function act(label, fn) {
+  try { await fn(); toast(label); await refresh(); } catch (e) { if (e.message !== 'unauthorized') toast(e.message); }
+}
+
+function showLogin() {
+  $('#app').replaceChildren(h('div', { class: 'panel login' },
+    h('h2', {}, 'Token'),
+    h('p', {}, 'The atoll server was started with a custom --token. Enter it to continue; it is kept in this browser only.'),
+    h('form', { onsubmit: (e) => { e.preventDefault(); token = e.target.t.value.trim(); store.set('atoll-token', token); boot(); } },
+      h('input', { type: 'password', name: 't', autofocus: true, placeholder: 'token' }), h('button', { class: 'btn primary' }, 'Open'))));
+}
+
+function diffView(text) {
+  const pre = h('pre', { class: 'diff' });
+  for (const line of (text || '').split('\n')) {
+    let cls = '';
+    if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('new file') || line.startsWith('deleted file')) cls = 'f';
+    else if (line.startsWith('+')) cls = 'a';
+    else if (line.startsWith('-')) cls = 'd';
+    else if (line.startsWith('@@')) cls = 'h';
+    pre.append(h('span', { class: cls }, line || ' '));
+  }
+  return pre;
+}
+
+function scoreView(score) {
+  if (score == null) return null;
+  return h('span', { class: 'score' }, h('span', { class: 'bar' }, h('i', { style: `width:${Math.round(score * 100)}%` })), score.toFixed(2));
+}
+
+// Live events re-render the page; open panels, half-typed text and focus survive it.
+const ui = { open: new Set(), drafts: new Map() };
+function lazyDetails(key, label, load) {
+  const det = h('details', {}, h('summary', {}, label));
+  const fill = async () => {
+    if (det.dataset.loaded) return;
+    det.dataset.loaded = '1';
+    try {
+      for (const node of await load()) if (node) det.append(node);
+    } catch (e) {
+      det.dataset.loaded = '';
+      if (e.message !== 'unauthorized') toast(e.message);
+    }
+  };
+  det.addEventListener('toggle', () => {
+    if (det.open) { ui.open.add(key); fill(); } else ui.open.delete(key);
+  });
+  if (ui.open.has(key)) { det.open = true; fill(); }
+  return det;
+}
+function draft(el, key) {
+  el.dataset.key = key;
+  el.value = ui.drafts.get(key) ?? '';
+  el.addEventListener('input', () => ui.drafts.set(key, el.value));
+  return el;
+}
+
+async function renderScenario() {
+  const [summary, versions, candidates, reports, records] = await Promise.all([
+    api('GET', `/atoll/scenarios/${encodeURIComponent(current)}`),
+    api('GET', '/atoll/versions'),
+    api('GET', '/atoll/candidates'),
+    api('GET', '/atoll/reports'),
+    api('GET', '/atoll/records?limit=60'),
+  ]);
+  const byId = new Map(reports.reports.map((r) => [r.id, r]));
+  const c = summary.counts;
+
+  const title = h('div', { class: 'title-row' },
+    h('h1', {}, summary.name),
+    h('span', { class: 'step-badge' }, `step ${summary.step}`),
+    h('div', { class: 'counts' },
+      h('span', {}, h('b', {}, c.records), ' records'),
+      h('span', {}, h('b', {}, c.open), ' open'),
+      h('span', {}, h('b', {}, c.pending), ' pending review'),
+      h('span', {}, h('b', {}, c.addressed), ' addressed'),
+      h('span', {}, 'selection ', h('b', {}, summary.selection)),
+      summary.job ? h('span', { class: 'job' }, '● growing a candidate…') : null));
+
+  const askBox = h('form', { class: 'ask-form', onsubmit: (e) => {
+    e.preventDefault();
+    const text = e.target.text.value.trim();
+    if (!text) return;
+    act('Ask filed — the recipe will propose a change', async () => { await api('POST', '/atoll/harness/ask', { text, source: 'dashboard' }); ui.drafts.delete('ask'); });
+  } },
+    draft(h('textarea', { name: 'text', placeholder: 'Ask for a harness change in plain language — e.g. "when I ask you to fix a bug, reproduce it with a failing test first"' }), 'ask'),
+    h('button', { class: 'btn primary' }, 'File ask'));
+
+  // Timeline: published versions plus candidates that did not become one.
+  const entries = [];
+  const headStep = summary.step;
+  for (const v of versions.versions) entries.push({ at: v.at, kind: 'version', v, cand: candidates.candidates.find((x) => x.id === v.candidate) });
+  for (const cand of candidates.candidates) if (cand.status !== 'accepted') entries.push({ at: cand.decision?.at ?? cand.at, kind: 'candidate', cand });
+  entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || (b.v?.step ?? -1) - (a.v?.step ?? -1));
+
+  const timeline = h('div', { class: 'panel timeline' });
+  for (const e of entries) timeline.append(e.kind === 'version' ? versionItem(e.v, e.cand, headStep, byId) : candidateItem(e.cand, byId));
+  if (!entries.length) timeline.append(h('div', { class: 'empty' }, 'No versions yet.'));
+
+  const side = h('div', { class: 'panel' },
+    h('div', { class: 'tabs' },
+      ['feedback', 'records'].map((t) => h('button', { class: `tab ${tab === t ? 'active' : ''}`, onclick: () => { tab = t; refresh(); } }, t === 'feedback' ? `Feedback (${reports.reports.length})` : `Records (${records.total})`))),
+    tab === 'feedback' ? feedbackList(reports.reports) : recordList(records.records));
+
+  $('#app').replaceChildren(h('div', { class: 'layout' }, await sidebar(), h('main', {}, title, askBox,
+    h('div', { class: 'cols' },
+      h('section', {}, h('div', { class: 'section-title' }, 'Versions & candidates'), timeline),
+      h('section', {}, h('div', { class: 'section-title' }, 'Signals'), side)))));
+}
+
+function addressedList(ids, byId) {
+  if (!ids?.length) return null;
+  return h('ul', { class: 'verdicts' }, ids.map((id) => {
+    const r = byId.get(id);
+    return h('li', {}, h('span', { class: `pill ${r?.kind ?? ''}` }, r?.kind ?? 'report'), ' ', typeof r?.feedback === 'string' ? r.feedback : JSON.stringify(r?.feedback ?? id));
+  }));
+}
+
+function versionItem(v, cand, headStep, byId) {
+  const item = h('div', { class: 'item' },
+    h('div', { class: 'item-head' },
+      h('span', { class: `pill ${v.rollbackTo != null ? 'rollback' : 'accepted'}` }, `step ${v.step}`),
+      h('span', { class: 'sum' }, v.summary),
+      scoreView(v.score),
+      h('span', { class: 'when', title: v.at }, ago(v.at))),
+    v.step === 0 ? h('div', { class: 'sub' }, 'Initial empty harness.') : h('div', { class: 'sub' },
+      v.step === headStep ? 'current · ' : '',
+      v.decidedBy === 'user' ? 'accepted by you' : v.rollbackTo != null ? `restores step ${v.rollbackTo}` : 'accepted by policy',
+      v.addresses.length ? ` · addresses ${v.addresses.length}` : '',
+      h('span', { class: 'mono' }, ` · ${v.sha.slice(0, 8)}`)),
+    v.held.length ? h('div', { class: 'reason' }, h('span', { class: 'pill held' }, 'held'), ' ', v.held.join(', '), ' — executable, delivered only after you promote this step') : null,
+    v.rationale ? h('div', { class: 'reason' }, v.rationale) : null);
+  const actions = h('div', { class: 'actions' });
+  if (v.held.length) actions.append(h('button', { class: 'btn', onclick: () => act(`Promoted step ${v.step}`, () => api('POST', `/atoll/versions/${v.step}/promote`)) }, 'Promote'));
+  if (v.step !== headStep) actions.append(h('button', { class: 'btn', onclick: () => confirm(`Publish a new step identical to step ${v.step}?`) && act(`Rolled back to step ${v.step}`, () => api('POST', `/atoll/versions/${v.step}/rollback`)) }, 'Roll back to this'));
+  if (v.step > 0) {
+    item.append(lazyDetails(`${current}:v:${v.step}:${v.sha}`, 'Diff and feedback', async () => {
+      const full = await api('GET', `/atoll/versions/${v.step}`);
+      return [addressedList(v.addresses, byId), diffView(full.diff || '(no file changes)')];
+    }));
+  }
+  if (actions.children.length) item.append(actions);
+  return item;
+}
+
+function candidateItem(cand, byId) {
+  const j = cand.checks?.judge;
+  const item = h('div', { class: 'item' },
+    h('div', { class: 'item-head' },
+      h('span', { class: `pill ${cand.status}` }, cand.status),
+      h('span', { class: 'sum' }, cand.summary || (cand.status === 'running' ? 'Recipe is working…' : 'Candidate')),
+      scoreView(j?.score),
+      h('span', { class: 'when', title: cand.at }, ago(cand.at))),
+    h('div', { class: 'sub' }, `${cand.reports?.length ?? 0} feedback in batch · ${cand.changes.length} change(s) · base step ${cand.baseStep}`, h('span', { class: 'mono' }, ` · ${cand.id}`)),
+    cand.decision ? h('div', { class: 'reason' }, cand.decision.reason) : null);
+  if (cand.status !== 'running') {
+    item.append(lazyDetails(`${current}:c:${cand.id}:${cand.status}`, 'Details', async () => {
+      const full = await api('GET', `/atoll/candidates/${cand.id}`);
+      const pills = (items, pill) => (items?.length ? h('ul', { class: 'verdicts' }, items.map((x) => h('li', {}, ...pill(x)))) : null);
+      return [
+        full.rationale ? h('div', { class: 'reason' }, full.rationale) : null,
+        addressedList(full.addresses, byId),
+        pills(full.skipped, (s) => [h('span', { class: 'pill skipped' }, 'skipped'), ' ', s.why]),
+        pills(full.checks?.static?.errors, (x) => [h('span', { class: 'pill error' }, 'static'), ' ', x]),
+        pills(full.checks?.static?.warnings, (x) => [h('span', { class: 'pill held' }, 'warning'), ' ', x]),
+        pills(full.checks?.judge?.verdicts, (x) => [h('span', { class: `pill ${x.addressed ? 'ok' : 'error'}` }, x.addressed ? 'judge ✓' : 'judge ✗'), ' ', x.why]),
+        pills(full.checks?.judge?.regressions, (x) => [h('span', { class: 'pill error' }, 'regression'), ' ', x.why]),
+        full.checks?.evaluator ? h('div', { class: 'reason' }, `evaluator exit ${full.checks.evaluator.code}`) : null,
+        full.checks?.evaluator?.output ? diffView(full.checks.evaluator.output) : null,
+        full.diff ? diffView(full.diff) : null,
+      ];
+    }));
+  }
+  if (cand.status === 'pending' || (cand.status === 'rejected' && cand.checks?.static?.ok && cand.changes.length)) {
+    item.append(h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', onclick: () => act('Accepted — published as a new step', () => api('POST', `/atoll/candidates/${cand.id}/accept`, {})) }, cand.status === 'rejected' ? 'Accept anyway' : 'Accept'),
+      cand.status === 'pending' ? h('button', { class: 'btn danger', onclick: () => act('Rejected', () => api('POST', `/atoll/candidates/${cand.id}/reject`, { reason: prompt('Why? (goes back to the recipe)') || undefined })) }, 'Reject') : null));
+  }
+  return item;
+}
+
+function feedbackList(reports) {
+  if (!reports.length) return h('div', { class: 'empty' }, 'No feedback yet. File an ask above, or POST /atoll/report with a receipt.');
+  return h('div', {}, reports.map((r) => h('div', { class: 'item' },
+    h('div', { class: 'item-head' },
+      h('span', { class: `pill ${r.kind}` }, r.kind),
+      h('span', { class: 'sum' }, typeof r.feedback === 'string' ? r.feedback : r.feedback ? JSON.stringify(r.feedback) : `score ${r.score}`),
+      h('span', { class: 'when', title: r.at }, ago(r.at))),
+    h('div', { class: 'sub' },
+      h('span', { class: `pill ${r.state?.status}` }, r.state?.status),
+      r.score != null ? ` score ${r.score}` : '',
+      r.state?.step != null ? ` · step ${r.state.step}` : '',
+      r.state?.why ? ` · ${r.state.why}` : '',
+      r.state?.attempts ? ` · ${r.state.attempts} rejected attempt(s)` : '',
+      r.references.length ? ` · ${r.references.length} receipt(s)` : ''))));
+}
+
+function recordList(records) {
+  if (!records.length) return h('div', { class: 'empty' }, 'No records yet. Send a request to /v1/chat/completions or /v1/messages, or install the Claude Code harness.');
+  return h('div', {}, records.map((r) => {
+    const user = [...(r.request?.messages ?? [])].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const form = h('form', { class: 'inline-report', onsubmit: (e) => {
+      e.preventDefault();
+      const score = Number(e.submitter?.value);
+      const feedback = e.target.fb.value.trim() || undefined;
+      act('Report attached', async () => { await api('POST', '/atoll/report', { score, feedback, references: [r.id], source: 'dashboard' }); ui.drafts.delete(`fb:${r.id}`); });
+    } },
+      draft(h('input', { type: 'text', name: 'fb', placeholder: 'What should change? (optional)' }), `fb:${r.id}`),
+      h('button', { class: 'btn', value: '1', title: 'good' }, '👍'),
+      h('button', { class: 'btn', value: '0', title: 'bad' }, '👎'));
+    return h('div', { class: 'item' },
+      h('div', { class: 'item-head' },
+        h('span', { class: `pill ${r.status}` }, r.source),
+        h('span', { class: 'sum mono copy', title: 'copy receipt', onclick: () => { navigator.clipboard?.writeText(r.id); toast('Receipt copied'); } }, r.id),
+        h('span', { class: 'when', title: r.at }, ago(r.at))),
+      h('div', { class: 'quote' }, user.slice(0, 600)),
+      r.response?.text ? h('div', { class: 'quote assistant' }, r.response.text.slice(0, 600)) : r.error ? h('div', { class: 'quote assistant' }, r.error) : null,
+      r.tools?.length ? h('div', { class: 'sub mono' }, r.tools.slice(0, 8).map((t) => t.name).join(' · ')) : null,
+      h('div', { class: 'sub' }, `${r.model ?? ''} · harness step ${r.harnessStep}`, r.reports.length ? ` · ${r.reports.map((x) => x.score != null ? `${x.kind} ${x.score}` : x.kind).join(', ')}` : ''),
+      form);
+  }));
+}
+
+async function sidebar() {
+  const { scenarios } = await api('GET', '/atoll/scenarios');
+  return h('aside', {},
+    h('h2', {}, 'Scenarios'),
+    scenarios.map((s) => h('button', { class: `scn ${s.name === current ? 'active' : ''}`, onclick: () => { current = s.name; store.set('atoll-scenario', current); refresh(); } },
+      h('span', {}, s.name), h('small', {}, `step ${s.step}${s.counts.open ? ` · ${s.counts.open} open` : ''}`))),
+    h('form', { class: 'new-scn', onsubmit: (e) => {
+      e.preventDefault();
+      const name = e.target.n.value.trim();
+      if (!name) return;
+      act(`Scenario ${name} ready`, async () => { await api('POST', '/atoll/scenarios', { name }); current = name; store.set('atoll-scenario', name); ui.drafts.delete('new-scenario'); });
+    } }, draft(h('input', { type: 'text', name: 'n', placeholder: 'new scenario' }), 'new-scenario'), h('button', { class: 'btn' }, '+')));
+}
+
+let refreshing = null;
+async function refresh() {
+  if (refreshing) { refreshing.again = true; return; }
+  refreshing = {};
+  const focused = document.activeElement;
+  const focusKey = focused?.dataset?.key;
+  const selection = focusKey ? [focused.selectionStart, focused.selectionEnd] : null;
+  try {
+    const { scenarios } = await api('GET', '/atoll/scenarios');
+    if (!current || !scenarios.some((s) => s.name === current)) current = scenarios[0]?.name ?? null;
+    if (!current) {
+      $('#app').replaceChildren(h('div', { class: 'layout' }, await sidebar(), h('main', {}, h('div', { class: 'panel empty' }, 'No scenarios yet. Create one on the left, or send any request with an x-atoll-scenario header.'))));
+    } else await renderScenario();
+    const again = focusKey && document.querySelector(`[data-key="${CSS.escape(focusKey)}"]`);
+    if (again && again !== document.activeElement) {
+      again.focus();
+      try { again.setSelectionRange(...selection); } catch {}
+    }
+  } catch (e) {
+    if (e.message !== 'unauthorized') toast(e.message);
+  } finally {
+    const again = refreshing.again;
+    refreshing = null;
+    if (again) refresh();
+  }
+}
+
+let events;
+function connect() {
+  events?.close();
+  events = new EventSource(`/atoll/events?token=${encodeURIComponent(token)}`);
+  events.onopen = () => { $('#live').classList.add('live'); $('#live-label').textContent = 'live'; };
+  events.onerror = () => { $('#live').classList.remove('live'); $('#live-label').textContent = 'reconnecting'; };
+  events.onmessage = (m) => {
+    const e = JSON.parse(m.data);
+    if (e.type === 'version') toast(`${e.scenario}: step ${e.step} published`);
+    clearTimeout(connect.t);
+    connect.t = setTimeout(refresh, 250);
+  };
+}
+
+async function boot() {
+  if (!token) return showLogin();
+  health = await fetch('/healthz').then((r) => r.json()).catch(() => null);
+  if (health) $('#meta').replaceChildren(
+    h('span', {}, 'upstream ', h('b', {}, health.upstream), health.model ? ` · ${health.model}` : ''),
+    h('span', {}, 'recipe ', h('b', {}, health.recipe)),
+    h('span', {}, 'v', health.version));
+  await refresh();
+  // ?nolive: a static snapshot (headless screenshots never go idle with an open event stream).
+  if (!new URLSearchParams(location.search).has('nolive')) connect();
+  else $('#live-label').textContent = 'snapshot';
+}
+boot();
+</script>
+</body>
+</html>

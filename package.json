@@ -1,0 +1,38 @@
+{
+  "name": "atoll",
+  "version": "0.1.0",
+  "description": "A harness that grows from how you use it: serve an agent, record feedback, propose harness changes, evaluate them, and commit accepted ones to a version history.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/didrod205/atoll.git"
+  },
+  "homepage": "https://github.com/didrod205/atoll#readme",
+  "type": "module",
+  "bin": {
+    "atoll": "bin/atoll.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "harness",
+    "README.md",
+    "README.ko.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "demo": "node bin/atoll.js demo"
+  },
+  "keywords": [
+    "claude-code",
+    "agent",
+    "harness",
+    "continual-learning",
+    "feedback",
+    "skills"
+  ],
+  "license": "MIT"
+}
