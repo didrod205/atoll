@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>atoll weights</title>
+<link rel="stylesheet" href="figure.css">
+<style>
+  .grid { display: grid; grid-template-columns: 1fr 392px; gap: 26px; align-items: stretch; }
+  .panel { border: 1px solid var(--line); border-radius: 16px; background: var(--bg); padding: 20px 22px 18px; }
+  .label { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); font-weight: 600; margin-bottom: 4px; }
+  .panel h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.015em; }
+  .legend { display: flex; gap: 20px; font-size: 14.5px; color: var(--muted); margin-top: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .q { font-weight: 600; font-size: 18px; margin: 10px 0 14px; }
+  .reply { border-radius: 12px; padding: 12px 14px; font-size: 16px; line-height: 1.4; border: 1px solid var(--line); }
+  .reply .who { display: block; font: 600 12.5px/1 var(--mono); margin-bottom: 7px; color: var(--muted); letter-spacing: 0.02em; }
+  .reply.after { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: var(--accent-soft); }
+  .reply.after .who { color: var(--accent); }
+  .between { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14.5px; margin: 12px 4px; }
+  .between svg { flex: none; color: var(--faint); }
+  .meta { margin-top: 14px; font: 13.5px/1.5 var(--mono); color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="frame"><div class="card">
+  <div class="eyebrow"><span class="brand">atoll 0.2 · weights</span></div>
+  <h1>Train the model you serve — and publish only what evaluates better</h1>
+  <div class="grid">
+    <div class="panel">
+      <div class="label">real run · task stream with a checker</div>
+      <h2>Held-out accuracy of the version serving</h2>
+      <svg id="chart" width="100%" viewBox="0 0 640 318" role="img" aria-label="held-out accuracy by candidate"></svg>
+      <div class="legend">
+        <span><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--accent)"/></svg>published → serves next request</span>
+        <span><svg width="14" height="14"><circle cx="7" cy="7" r="5" fill="var(--card)" stroke="var(--bad)" stroke-width="2"/></svg>rejected — serving unchanged</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="label">real run · hot swap, no restart</div>
+      <div class="q">“Who keeps the reef?”</div>
+      <div class="reply"><span class="who">step 0 · base model</span>As an AI language model, I don’t have personal beliefs or opinions…</div>
+      <div class="between">
+        <svg width="16" height="40" viewBox="0 0 16 40"><path d="M8 2v34M2 30l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>corrections → 6 LoRA steps →<br>evaluated → published as step 1</span>
+      </div>
+      <div class="reply after"><span class="who">step 1 · same server</span>The reef keepers do.</div>
+      <div class="meta">adapter 11.75 MB · whole demo 11 s</div>
+    </div>
+  </div>
+  <div class="foot">
+    Measured on a MacBook (Apple A18 Pro, 8 GB) with <code>Qwen2.5-0.5B-Instruct-4bit</code> on MLX.
+    Left: <code>examples/weights/one-word</code>, 4 rounds of 26 questions, <code>imitate</code> gated by 11 questions never trained on.
+    Right: <code>atoll demo weights --runtime mlx</code>.
+  </div>
+</div></div>
+<script src="weights-data.js"></script>
+<script>
+  if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.classList.add('dark');
+  const data = window.WEIGHTS;
+  const svg = document.getElementById('chart');
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; svg.append(e); return e; };
+  const L = 58, R = 624, T = 26, B = 266;
+  const lo = 4, hi = 10;
+  const X = (i) => L + (i * (R - L)) / data.length;
+  const Y = (k) => B - ((k - lo) * (B - T)) / (hi - lo);
+  for (const k of [5, 7, 9, 11].filter((k) => k <= hi)) {
+    el('line', { x1: L, x2: R, y1: Y(k), y2: Y(k), stroke: 'var(--line)', 'stroke-width': 1 });
+    el('text', { x: L - 12, y: Y(k) + 5, 'text-anchor': 'end', 'font-size': 14, fill: 'var(--muted)' }, `${k}/11`);
+  }
+  // serving version over time: base, then each published candidate
+  let serving = data[0].current;
+  const path = [`M${X(0)},${Y(serving)}`];
+  data.forEach((c, i) => {
+    if (c.status === 'accepted') {
+      path.push(`L${X(i + 1)},${Y(serving)}`, `L${X(i + 1)},${Y(c.candidate)}`);
+      serving = c.candidate;
+    }
+  });
+  path.push(`L${R},${Y(serving)}`);
+  el('path', { d: path.join(' '), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 3, 'stroke-linejoin': 'round' });
+  el('circle', { cx: X(0), cy: Y(data[0].current), r: 6, fill: 'var(--muted)' });
+  el('text', { x: X(0), y: Y(data[0].current) + 26, 'text-anchor': 'middle', 'font-size': 14, fill: 'var(--muted)' }, 'base');
+  serving = data[0].current;
+  data.forEach((c, i) => {
+    const x = X(i + 1);
+    if (c.status === 'accepted') {
+      el('circle', { cx: x, cy: Y(c.candidate), r: 7.5, fill: 'var(--accent)' });
+      el('text', { x, y: Y(c.candidate) - 15, 'text-anchor': 'middle', 'font-size': 15, 'font-weight': 700, fill: 'var(--accent)' }, `step ${c.step}`);
+      serving = c.candidate;
+    } else {
+      el('line', { x1: x, x2: x, y1: Y(serving) + 8, y2: Y(c.candidate) - 8, stroke: 'var(--bad)', 'stroke-width': 1.5, 'stroke-dasharray': '3 4', opacity: 0.7 });
+      el('circle', { cx: x, cy: Y(c.candidate), r: 6.5, fill: 'var(--bg)', stroke: 'var(--bad)', 'stroke-width': 2.2 });
+    }
+    el('text', { x, y: B + 24, 'text-anchor': 'middle', 'font-size': 14, fill: 'var(--faint)' }, String(i + 1));
+  });
+  el('text', { x: (L + R) / 2, y: B + 48, 'text-anchor': 'middle', 'font-size': 14, fill: 'var(--muted)' }, 'training candidates, in order — each 3–9 LoRA steps, under 5 s');
+  const firstRejected = data.findIndex((c) => c.status === 'rejected');
+  el('text', { x: X(firstRejected + 1) + 2, y: Y(serving) - 14, 'font-size': 14.5, fill: 'var(--muted)' }, `${data.filter((c) => c.status === 'rejected').length} later candidates scored lower — step 2 keeps serving`);
+</script>
+</body>
+</html>

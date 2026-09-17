@@ -5,13 +5,12 @@
 [![zero deps](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/atoll-harness?activeTab=dependencies)
 [![license](https://img.shields.io/npm/l/atoll-harness.svg)](https://github.com/didrod205/atoll/blob/main/LICENSE)
 
-**An agent that keeps getting better from how you use it.** atoll serves your agent, records feedback on each response, grows an update from that feedback, checks the update, and publishes it as a numbered version — without taking the agent down. Three things can grow:
+**An agent that keeps getting better from how you use it.** atoll serves your agent, records feedback on each response, grows an update from that feedback, checks the update, and publishes it as a numbered version — without taking the agent down. Three things can grow: the Claude Code **harness**, the **weights** of a model you serve, and the best solution to a hard problem (**discovery**).
 
-| | grows | from | runs on |
-|---|---|---|---|
-| **harness** | rules, skills, slash commands and hooks for Claude Code | asks, thumbs-downs, corrections in chat | your Claude Code login — no GPU, no API key |
-| **weights** | a LoRA adapter on a model atoll serves, hot-swapped in | scores and corrections on responses | Apple Silicon (MLX), or any GPU box that speaks [the runtime protocol](runtime/PROTOCOL.md) |
-| **discovery** | the best solution to one hard problem | an evaluator that scores every attempt | any model; with MLX, the proposer also trains on its own attempts |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/didrod205/atoll/main/docs/overview-dark.png">
+  <img alt="atoll 0.2: one loop — serve, observe, grow, commit — and three things that grow. Harness: rules, skills and commands for Claude Code, checked by static checks and a model judge. Weights: a LoRA adapter on the model you serve, checked by an eval set or likelihood plus retention, hot-swapped in. Discovery: the best solution to one problem, checked by its evaluator in a sandbox, every new best published." src="https://raw.githubusercontent.com/didrod205/atoll/main/docs/overview-light.png">
+</picture>
 
 [한국어 README](https://github.com/didrod205/atoll/blob/main/README.ko.md)
 
@@ -22,10 +21,6 @@ npx atoll-harness demo discovery    # discovery: 30 attempts at packing 26 circl
 ```
 
 All three demos run offline in a few seconds on a deterministic mock model. The runtime itself has no npm dependencies.
-
-![atoll dashboard: versions and candidates on the left, feedback on the right](https://raw.githubusercontent.com/didrod205/atoll/main/docs/dashboard.png)
-
-<sub>The dashboard, showing seeded example data for the harness surface: three published steps, one candidate rejected by static checks, one hook held until promoted, and an implicit correction picked up from a session.</sub>
 
 ---
 
@@ -89,6 +84,10 @@ What lands in your project:
 
 Anything that executes code on your machine is committed but held. A promotion is pinned to the file's content: if a later step changes the script, it is held again.
 
+![atoll dashboard: versions and candidates on the left, feedback on the right](https://raw.githubusercontent.com/didrod205/atoll/main/docs/dashboard.png)
+
+<sub>The dashboard, showing seeded example data for the harness surface: three published steps, one candidate rejected by static checks, one hook held until promoted, and an implicit correction picked up from a session.</sub>
+
 The next session starts with a notice when a new version is ready. Pushback at the start of a prompt ("no, …", "don't …", "아니 …", "그거 말고 …") becomes an implicit report on the previous turn. After two of them, the recipe decides whether they reflect a standing preference.
 
 ## Weights — train the model you serve
@@ -117,6 +116,11 @@ Before a candidate adapter is published, atoll compares it with the adapter that
 - **with `--eval-set` or `--verifier-cmd`** — both adapters answer the tasks (greedy), and the candidate must score at least as well (`--min-gain`).
 - **without** — the candidate must make the good examples more likely than the serving adapter does, while its loss on the base model's own answers to generic prompts stays within `--retention-tolerance` of the base model's. That second check catches adapters that learn your feedback by forgetting everything else.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/didrod205/atoll/main/docs/weights-dark.png">
+  <img alt="Real run on an 8 GB MacBook with Qwen2.5-0.5B on MLX. Left: held-out accuracy of the serving version rises from 5/11 (base) to 7/11 at step 1 and 9/11 at step 2; six later candidates scored 7/11 or 5/11 and were rejected, so step 2 kept serving. Right: “Who keeps the reef?” — the base model answers “As an AI language model…”; after corrections and 6 LoRA steps the same server answers “The reef keepers do.”" src="https://raw.githubusercontent.com/didrod205/atoll/main/docs/weights-light.png">
+</picture>
+
 **Measured on a MacBook with an Apple A18 Pro and 8 GB**, with the command above and `node examples/weights/one-word/drive.mjs --rounds 4`, which asks 26 one-word questions per round, checks each answer, and reports a score plus a correction when it was wrong:
 
 | | held-out accuracy (11 questions never trained on) | answers right in the round (26 questions, temperature 0.7) |
@@ -143,6 +147,11 @@ A problem is a directory: a task, a seed solution, and an evaluator that prints 
 ```bash
 atoll discover examples/discovery/circle-packing --upstream claude --attempts 40
 ```
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/didrod205/atoll/main/docs/discovery-dark.png">
+  <img alt="Circle packing from atoll demo discovery: the best packing of 26 circles (sum of radii 2.4759, from a 2.4640 seed), and a chart of 41 attempts with 14 published steps along the best-so-far line; propose, evaluate in a sandboxed copy, publish only a new best. The demo proposer only nudges constants." src="https://raw.githubusercontent.com/didrod205/atoll/main/docs/discovery-light.png">
+</picture>
 
 Output of `atoll demo discovery`, whose mock proposer only nudges numeric constants (★ = new best, published as a step; · = valid but not better; ✗ = invalid):
 

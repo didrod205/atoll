@@ -49,7 +49,7 @@
   .counts { display: flex; gap: 16px; color: var(--muted); flex-wrap: wrap; }
   .counts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
   .job { color: var(--warn); }
-  input[type=text], input[type=password], textarea { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 7px; padding: 7px 10px; outline: none; }
+  input[type=text], input[type=password], input[type=number], textarea { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 7px; padding: 7px 10px; outline: none; }
   input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
   .btn:hover { border-color: var(--ink); }
@@ -152,7 +152,7 @@
 const DEFAULT_TOKEN = '__ATOLL_DEFAULT_TOKEN__';
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 let token = store.get('atoll-token') || DEFAULT_TOKEN;
-let current = store.get('atoll-scenario');
+let current = new URLSearchParams(location.search).get('scenario') || store.get('atoll-scenario');
 let tab = 'feedback';
 let health = null;
 

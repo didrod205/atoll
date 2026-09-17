@@ -1,0 +1,50 @@
+/* Shared look for the README figures. Rendered at 1200px wide, 2x, light and dark. */
+:root {
+  --bg: #ffffff;
+  --card: #fbfaf7;
+  --line: #e4e2db;
+  --line-strong: #d1cec4;
+  --ink: #1b211e;
+  --muted: #646d67;
+  --faint: #9ea5a0;
+  --accent: #0f766e;
+  --accent-soft: #dcefeb;
+  --bad: #b42318;
+  --bad-soft: #fbe8e5;
+  --new: #9a5a07;
+  --new-soft: #f9eed8;
+  --mono: "SF Mono", ui-monospace, Menlo, monospace;
+}
+.dark {
+  --bg: #0d1117;
+  --card: #141a21;
+  --line: #262e36;
+  --line-strong: #36404a;
+  --ink: #e8ebed;
+  --muted: #9ba4ac;
+  --faint: #66707a;
+  --accent: #5ec2b5;
+  --accent-soft: #16302d;
+  --bad: #f08a7e;
+  --bad-soft: #36191a;
+  --new: #e4b062;
+  --new-soft: #30271a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); }
+body {
+  font: 19px/1.45 -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+.frame { width: 1200px; padding: 24px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 34px 38px 30px; }
+.eyebrow { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: -0.01em; color: var(--accent); }
+.tag { font: 600 13px/1 var(--mono); padding: 5px 9px 4px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); letter-spacing: 0.02em; }
+.tag.new { background: var(--new-soft); color: var(--new); }
+h1 { margin: 0 0 22px; font-size: 30px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
+h1 em { font-style: normal; color: var(--muted); font-weight: 500; }
+.foot { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; line-height: 1.5; }
+.foot code, code { font-family: var(--mono); font-size: 0.9em; }
+svg text { font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; }

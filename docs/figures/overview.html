@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>atoll overview</title>
+<link rel="stylesheet" href="figure.css">
+<style>
+  .loop { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; align-items: stretch; gap: 0; margin-bottom: 26px; }
+  .stage { border: 1px solid var(--line-strong); border-radius: 14px; padding: 14px 16px 13px; background: var(--bg); }
+  .stage b { display: block; font-size: 18px; letter-spacing: -0.01em; margin-bottom: 3px; }
+  .stage b span { color: var(--accent); font-family: var(--mono); font-weight: 600; margin-right: 6px; }
+  .stage p { margin: 0; color: var(--muted); font-size: 15.5px; line-height: 1.4; }
+  .arrow { display: flex; align-items: center; justify-content: center; width: 34px; color: var(--faint); }
+  .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .surface { border: 1px solid var(--line); border-radius: 16px; padding: 20px 20px 16px; background: var(--bg); }
+  .surface.fresh { border-color: color-mix(in srgb, var(--new) 45%, var(--line)); }
+  .surface header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .name { font: 700 14px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  .surface h2 { margin: 0 0 14px; font-size: 21px; line-height: 1.25; letter-spacing: -0.015em; }
+  dl { margin: 0; display: grid; gap: 10px; }
+  dt { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); font-weight: 600; }
+  dd { margin: 1px 0 0; font-size: 16px; line-height: 1.38; }
+</style>
+</head>
+<body>
+<div class="frame"><div class="card">
+  <div class="eyebrow"><span class="brand">atoll 0.2</span></div>
+  <h1>One loop, three things that grow <em>— from how you use your agent</em></h1>
+
+  <div class="loop">
+    <div class="stage"><b><span>1</span>Serve</b><p>OpenAI / Anthropic API; a receipt on every reply</p></div>
+    <div class="arrow"><svg width="22" height="14" viewBox="0 0 22 14"><path d="M1 7h18M13 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="stage"><b><span>2</span>Observe</b><p>scores, corrections and asks matched to receipts</p></div>
+    <div class="arrow"><svg width="22" height="14" viewBox="0 0 22 14"><path d="M1 7h18M13 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="stage"><b><span>3</span>Grow</b><p>a recipe drafts the next version</p></div>
+    <div class="arrow"><svg width="22" height="14" viewBox="0 0 22 14"><path d="M1 7h18M13 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="stage"><b><span>4</span>Commit</b><p>evaluate; publish step N, or keep serving the last one</p></div>
+  </div>
+
+  <div class="cols">
+    <section class="surface">
+      <header><span class="name">harness</span></header>
+      <h2>Rules, skills and commands for Claude Code</h2>
+      <dl>
+        <div><dt>grows from</dt><dd>asks, thumbs-downs, “no, use pnpm”</dd></div>
+        <div><dt>checked by</dt><dd>static checks + a model judge</dd></div>
+        <div><dt>goes live</dt><dd><code>/atoll-update</code> in your project; hooks wait for a promote</dd></div>
+        <div><dt>runs on</dt><dd>your Claude Code login</dd></div>
+      </dl>
+    </section>
+    <section class="surface fresh">
+      <header><span class="name">weights</span><span class="tag new">new in 0.2</span></header>
+      <h2>A LoRA adapter on the model you serve</h2>
+      <dl>
+        <div><dt>grows from</dt><dd>scored replies and corrections — <code>imitate</code>, <code>reinforce</code></dd></div>
+        <div><dt>checked by</dt><dd>an eval set or verifier; else likelihood + retention</dd></div>
+        <div><dt>goes live</dt><dd>hot swap between requests, no restart</dd></div>
+        <div><dt>runs on</dt><dd>MLX on Apple Silicon, or a remote GPU worker</dd></div>
+      </dl>
+    </section>
+    <section class="surface fresh">
+      <header><span class="name">discovery</span><span class="tag new">new in 0.2</span></header>
+      <h2>The best solution to one hard problem</h2>
+      <dl>
+        <div><dt>grows from</dt><dd>new attempts built on the best so far</dd></div>
+        <div><dt>checked by</dt><dd>the problem’s evaluator, in a sandboxed copy</dd></div>
+        <div><dt>goes live</dt><dd>every new best becomes a step</dd></div>
+        <div><dt>runs on</dt><dd>any model; with MLX the proposer trains too, and is reverted if it gets worse</dd></div>
+      </dl>
+    </section>
+  </div>
+</div></div>
+<script>if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.classList.add('dark');</script>
+</body>
+</html>

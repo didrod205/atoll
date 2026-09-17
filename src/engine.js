@@ -95,6 +95,10 @@ export class Engine extends EventEmitter {
 
       const { step } = await s.artifact.head();
       const surface = this.recipe.surface ?? 'harness';
+      if (s.meta.surface !== surface) {
+        s.meta.surface = surface;
+        s.saveMeta();
+      }
       const cand = {
         id: newId('cand'),
         at: now(),

@@ -5,13 +5,12 @@
 [![zero deps](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/atoll-harness?activeTab=dependencies)
 [![license](https://img.shields.io/npm/l/atoll-harness.svg)](https://github.com/didrod205/atoll/blob/main/LICENSE)
 
-**쓰는 방식대로 계속 나아지는 에이전트.** atoll은 에이전트를 서빙하면서 응답마다 피드백을 기록하고, 그 피드백으로 업데이트를 만들어 검사한 뒤 번호 붙은 버전으로 발행합니다. 에이전트는 멈추지 않습니다. 자라는 대상은 세 가지입니다.
+**쓰는 방식대로 계속 나아지는 에이전트.** atoll은 에이전트를 서빙하면서 응답마다 피드백을 기록하고, 그 피드백으로 업데이트를 만들어 검사한 뒤 번호 붙은 버전으로 발행합니다. 에이전트는 멈추지 않습니다. 자라는 대상은 Claude Code **harness**, 서빙하는 모델의 **weights**, 그리고 어려운 문제의 최선의 해(**discovery**) 세 가지입니다.
 
-| | 자라는 것 | 무엇으로부터 | 어디서 |
-|---|---|---|---|
-| **harness** | Claude Code의 규칙·스킬·슬래시 커맨드·훅 | 요청, 👎, 채팅 속 교정 | 기존 Claude Code 로그인 — GPU·API 키 불필요 |
-| **weights** | atoll이 서빙하는 모델의 LoRA 어댑터 (무중단 교체) | 응답에 매긴 점수와 교정 | Apple Silicon(MLX), 또는 [런타임 프로토콜](runtime/PROTOCOL.md)을 구현한 GPU 서버 |
-| **discovery** | 어려운 문제 하나의 최선의 해 | 모든 시도를 채점하는 평가기 | 어떤 모델이든 — MLX면 제안 모델이 자기 시도로 학습까지 함 |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/didrod205/atoll/main/docs/overview-dark.png">
+  <img alt="atoll 0.2: 하나의 루프(serve, observe, grow, commit)로 자라는 세 가지. harness는 Claude Code 규칙·스킬·커맨드를 정적 검사와 모델 심사로 확인하고, weights는 서빙 모델의 LoRA 어댑터를 평가 세트 또는 우도와 유지 검사로 확인해 무중단 교체하며, discovery는 문제 하나의 최선의 해를 샌드박스 속 평가기로 확인해 새 최고점마다 발행합니다." src="https://raw.githubusercontent.com/didrod205/atoll/main/docs/overview-light.png">
+</picture>
 
 [English README](https://github.com/didrod205/atoll#readme)
 
@@ -22,10 +21,6 @@ npx atoll-harness demo discovery    # discovery: 정사각형에 원 26개 채�
 ```
 
 세 데모 모두 결정적인 모의(mock) 모델로 오프라인에서 몇 초 안에 끝납니다. 런타임 자체의 npm 의존성은 0개입니다.
-
-![atoll 대시보드: 왼쪽은 버전과 후보, 오른쪽은 피드백](https://raw.githubusercontent.com/didrod205/atoll/main/docs/dashboard.png)
-
-<sub>harness 표면에 예시 데이터를 넣은 대시보드 화면입니다. 발행된 step 3개, 정적 검사에서 거절된 후보 1개, 승격 전까지 보류된 훅 1개, 세션에서 잡아낸 암묵적 교정 1개가 보입니다.</sub>
 
 ---
 
@@ -89,6 +84,10 @@ curl -fsS -H "Authorization: Bearer atoll-local" -H "x-atoll-scenario: my-harnes
 
 내 컴퓨터에서 코드를 실행하는 파일은 커밋은 되지만 보류됩니다. 승격은 파일 내용에 고정되므로, 이후 step에서 스크립트가 바뀌면 다시 보류됩니다.
 
+![atoll 대시보드: 왼쪽은 버전과 후보, 오른쪽은 피드백](https://raw.githubusercontent.com/didrod205/atoll/main/docs/dashboard.png)
+
+<sub>harness 표면에 예시 데이터를 넣은 대시보드 화면입니다. 발행된 step 3개, 정적 검사에서 거절된 후보 1개, 승격 전까지 보류된 훅 1개, 세션에서 잡아낸 암묵적 교정 1개가 보입니다.</sub>
+
 새 버전이 준비되면 다음 세션이 알림과 함께 시작합니다. 프롬프트 첫머리에서 반박하면("아니 …", "그거 말고 …", "no, …", "don't …") 직전 턴에 대한 암묵적 리포트가 됩니다. 이런 교정이 두 번 쌓이면, 그게 고정된 선호인지 레시피가 판단합니다.
 
 ## Weights — 서빙하는 모델을 직접 학습
@@ -117,6 +116,11 @@ atoll serve --runtime mlx --model mlx-community/Qwen2.5-0.5B-Instruct-4bit \
 - **`--eval-set`이나 `--verifier-cmd`가 있으면** — 두 어댑터가 과제에 (그리디로) 답하고, 후보가 같거나 더 높은 점수를 받아야 합니다(`--min-gain`).
 - **없으면** — 후보가 좋은 예시를 서빙 어댑터보다 더 잘 맞혀야 하고, 동시에 일반 프롬프트에 대한 기본 모델 자신의 답에서 손실이 기본 모델 대비 `--retention-tolerance` 안에 있어야 합니다. 두 번째 조건이 "피드백을 배우는 대신 다른 걸 다 잊어버린" 어댑터를 걸러냅니다.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/didrod205/atoll/main/docs/weights-dark.png">
+  <img alt="8GB 맥북에서 MLX로 Qwen2.5-0.5B를 돌린 실제 결과. 왼쪽: 서빙 버전의 미학습 질문 정확도가 기본 5/11에서 step 1의 7/11, step 2의 9/11로 올랐고, 이후 후보 6개는 7/11 또는 5/11이라 거절되어 step 2가 계속 서빙됨. 오른쪽: “Who keeps the reef?”에 기본 모델은 “As an AI language model…”이라 답했지만, 교정과 LoRA 6스텝 뒤 같은 서버가 “The reef keepers do.”라고 답함." src="https://raw.githubusercontent.com/didrod205/atoll/main/docs/weights-light.png">
+</picture>
+
 **Apple A18 Pro · 8GB 맥북에서 측정한 결과입니다.** 위 명령으로 서버를 띄우고 `node examples/weights/one-word/drive.mjs --rounds 4`를 실행했습니다. 이 스크립트는 한 라운드에 한 단어 질문 26개를 던지고, 답을 검사해 점수를 보고하며, 틀리면 교정도 함께 보냅니다.
 
 | | 한 번도 학습하지 않은 질문 11개 정확도 | 라운드 중 맞힌 답 (질문 26개, temperature 0.7) |
@@ -143,6 +147,11 @@ atoll serve --runtime mlx --model mlx-community/Qwen2.5-0.5B-Instruct-4bit \
 ```bash
 atoll discover examples/discovery/circle-packing --upstream claude --attempts 40
 ```
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/didrod205/atoll/main/docs/discovery-dark.png">
+  <img alt="atoll demo discovery의 원 채우기: 원 26개의 최선 배치(반지름 합 2.4759, 시작 해답 2.4640)와, 41번의 시도 중 14번이 step으로 발행된 최고점 추이 그래프. 제안하고, 샌드박스 사본에서 평가하고, 새 최고점만 발행합니다. 데모의 제안 모델은 상수만 조금씩 바꿉니다." src="https://raw.githubusercontent.com/didrod205/atoll/main/docs/discovery-light.png">
+</picture>
 
 아래는 `atoll demo discovery`의 실제 출력입니다. 모의 제안 모델은 숫자 상수만 조금씩 바꿉니다(★ = 새 최고점, step으로 발행 · = 유효하지만 더 낫지 않음 · ✗ = 무효).
 

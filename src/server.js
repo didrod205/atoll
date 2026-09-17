@@ -239,7 +239,8 @@ export async function createServer(options = {}) {
     const counts = { records: s.records.size, reports: s.reports.size, open: 0, pending: 0, addressed: 0, skipped: 0, stale: 0, evaluated: 0, candidates: s.candidates.size };
     for (const st of states.values()) counts[st.status] = (counts[st.status] ?? 0) + 1;
     const head = await s.artifact.head();
-    const surface = s.meta.surface ?? recipe.surface ?? 'harness';
+    // A scenario keeps the surface it grew on, whatever recipe this server was started with.
+    const surface = s.meta.surface ?? [...s.candidates.values()].reverse().find((c) => c.surface)?.surface ?? recipe.surface ?? 'harness';
     return {
       name: s.name,
       createdAt: s.meta.createdAt,
