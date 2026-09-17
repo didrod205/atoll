@@ -40,7 +40,7 @@ What lands in your project:
 | `rules/<name>.md` | a managed block in `CLAUDE.md` — your own text is never touched | immediately |
 | `skills/<name>/SKILL.md` | `.claude/skills/<name>/` | immediately |
 | `commands/<name>.md` | `.claude/commands/<name>.md` | immediately, unless it runs shell (`!` or `allowed-tools`) |
-| `hooks/<name>.json` + script | `.claude/settings.json` + `.claude/atoll/hooks/` | **held until you promote the step** |
+| `hooks/<name>.json` + script | `.claude/settings.local.json` + `.claude/atoll/hooks/` | **held until you promote the step** |
 
 Anything that executes code on your machine is committed but held. A promotion is pinned to the file's content: if a later step changes the script, it is held again.
 
@@ -67,6 +67,8 @@ curl -fsS -H "Authorization: Bearer atoll-local" -H "x-atoll-scenario: my-harnes
 ```
 
 This adds four slash commands, a `SessionStart` hook (update notice) and a `Stop` hook (records each finished turn to your local server), then installs the current version.
+
+Hooks go into `.claude/settings.local.json`, your personal settings, never the shared `settings.json`. In a git repository, atoll's machine-specific files (the client, local settings, and the `atoll-*` commands, which carry this machine's path) are listed in `.git/info/exclude`, so they stay out of commits. The rules, skills and commands atoll writes are ordinary project files you can commit. `node .claude/atoll/client.mjs uninstall` removes everything it added.
 
 **3. Work normally, and say what should change:**
 

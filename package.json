@@ -1,6 +1,6 @@
 {
   "name": "atoll-harness",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A harness that grows from how you use it: serve an agent, record feedback, propose harness changes, evaluate them, and commit accepted ones to a version history.",
   "repository": {
     "type": "git",

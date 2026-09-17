@@ -3,6 +3,7 @@
 // Zero dependencies. Every hook entry point exits 0 and stays quiet on failure:
 // a broken or stopped atoll server must never get in the way of a session.
 
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -12,8 +13,19 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
 const CLIENT = join(HERE, 'client.mjs');
 const RULES_START = '<!-- atoll:start -->';
+// Hooks go to the personal settings file: settings.json is usually committed,
+// and a teammate without atoll would get a failing hook on every session.
+const LOCAL_SETTINGS = join('.claude', 'settings.local.json');
+const SHARED_SETTINGS = join('.claude', 'settings.json');
+const EXCLUDE_START = '# atoll:start — local install, machine-specific paths';
+const EXCLUDE_END = '# atoll:end';
 const RULES_END = '<!-- atoll:end -->';
 
+const localTime = (iso) => {
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 const readJson = (file, fallback) => {
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
@@ -223,13 +235,49 @@ export function applyBundle(root, bundle, { force = false } = {}) {
     }
   }
 
-  const settingsFile = join(root, '.claude', 'settings.json');
-  const settings = readJson(settingsFile, {});
-  const merged = mergeHooks(settings, { harness: hooks });
-  if (JSON.stringify(merged) !== JSON.stringify(settings)) writeJson(settingsFile, merged);
+  writeHooks(root, { harness: hooks });
 
   writeJson(appliedFile, { step: bundle.step, revision: bundle.revision, files, at: new Date().toISOString() });
   return { ...report, step: bundle.step, rules: rules.length, hooks: hooks.length, held: bundle.held ?? [] };
+}
+
+function updateJson(file, fn) {
+  const before = readJson(file, null);
+  const after = fn(before ?? {});
+  if (JSON.stringify(after) === JSON.stringify(before ?? {})) return;
+  if (Object.keys(after).length) writeJson(file, after);
+  else if (before) rmSync(file);
+}
+
+/** own: atoll's client hooks (undefined = leave as they are). harness: promoted harness hooks. */
+export function writeHooks(root, { own, harness }) {
+  updateJson(join(root, LOCAL_SETTINGS), (settings) => mergeHooks(settings, { own, harness }));
+  // Entries an older install left in the shared file.
+  updateJson(join(root, SHARED_SETTINGS), (settings) => mergeHooks(settings, { own: own && [], harness: [] }));
+}
+
+/** Keep atoll's machine-local files out of commits via .git/info/exclude (never the shared .gitignore). */
+export function gitExclude(root, add) {
+  let excludeFile;
+  let prefix;
+  try {
+    const out = execFileSync('git', ['rev-parse', '--git-path', 'info/exclude', '--show-prefix'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n');
+    excludeFile = resolve(root, out[0]);
+    prefix = out[1] ?? '';
+  } catch {
+    return false; // not a git repository, or no git
+  }
+  const text = existsSync(excludeFile) ? readFileSync(excludeFile, 'utf8') : '';
+  const start = text.indexOf(EXCLUDE_START);
+  const end = text.indexOf(EXCLUDE_END);
+  const without = start >= 0 && end > start ? text.slice(0, start) + text.slice(end + EXCLUDE_END.length).replace(/^\n/, '') : text;
+  const block = [EXCLUDE_START, ...['.claude/atoll/', '.claude/settings.local.json', '.claude/commands/atoll-*.md'].map((p) => `/${prefix}${p}`), EXCLUDE_END].join('\n');
+  const next = add ? `${without.replace(/\n*$/, without ? '\n' : '')}${block}\n` : without;
+  if (next !== text) {
+    mkdirSync(dirname(excludeFile), { recursive: true });
+    writeFileSync(excludeFile, next);
+  }
+  return true;
 }
 
 // --- transcript → record -------------------------------------------------------
@@ -312,7 +360,7 @@ const commands = {
     if (r.added.length) lines.push(`  added    ${r.added.join(', ')}`);
     if (r.updated.length) lines.push(`  updated  ${r.updated.join(', ')}`);
     if (r.removed.length) lines.push(`  removed  ${r.removed.join(', ')}`);
-    lines.push(`  rules    ${r.rules} in CLAUDE.md${r.hooks ? `; hooks ${r.hooks} in .claude/settings.json` : ''}`);
+    lines.push(`  rules    ${r.rules} in CLAUDE.md${r.hooks ? `; hooks ${r.hooks} in .claude/settings.local.json` : ''}`);
     for (const k of r.kept) lines.push(`  kept     ${k}`);
     for (const h of r.held) lines.push(`  held     ${h.path} — executable; promote it with /atoll-versions <step> promote`);
     console.log(lines.join('\n'));
@@ -405,7 +453,7 @@ const commands = {
         v.decidedBy === 'user' ? 'by user' : null,
         v.held.length ? `held: ${v.held.join(', ')}` : null,
       ].filter(Boolean);
-      return `  step ${String(v.step).padEnd(3)} ${v.at.slice(0, 16).replace('T', ' ')}  ${v.summary}${flags.length ? `  [${flags.join('; ')}]` : ''}`;
+      return `  step ${String(v.step).padEnd(3)} ${localTime(v.at)}  ${v.summary}${flags.length ? `  [${flags.join('; ')}]` : ''}`;
     });
     console.log(`atoll versions — scenario "${cfg.scenario}"\n${lines.join('\n')}`);
     if (list.pending?.length) console.log(`\n  ${list.pending.length} candidate(s) waiting for review — open ${cfg.url}/ to accept or reject.`);
@@ -437,8 +485,6 @@ const commands = {
     };
     for (const [name, content] of Object.entries(files)) writeFileSync(join(commandsDir, name), content);
 
-    const settingsFile = join(ROOT, '.claude', 'settings.json');
-    const settings = readJson(settingsFile, {});
     const client = '"$CLAUDE_PROJECT_DIR/.claude/atoll/client.mjs"';
     const own = [
       { event: 'SessionStart', command: `node ${client} session-start`, timeout: 10 },
@@ -446,14 +492,18 @@ const commands = {
     ];
     // Keep promoted harness hooks already present; replace only atoll's own entries.
     const existingHarness = [];
-    for (const [event, groups] of Object.entries(settings.hooks ?? {})) {
-      for (const g of groups) for (const h of g.hooks ?? []) if (h.command?.includes('.claude/atoll/hooks/')) existingHarness.push({ event, matcher: g.matcher, command: h.command, timeout: h.timeout });
+    for (const file of [LOCAL_SETTINGS, SHARED_SETTINGS]) {
+      for (const [event, groups] of Object.entries(readJson(join(ROOT, file), {}).hooks ?? {})) {
+        for (const g of groups) for (const h of g.hooks ?? []) if (h.command?.includes('.claude/atoll/hooks/')) existingHarness.push({ event, matcher: g.matcher, command: h.command, timeout: h.timeout });
+      }
     }
-    writeJson(settingsFile, mergeHooks(settings, { own, harness: existingHarness }));
+    writeHooks(ROOT, { own, harness: existingHarness });
+    const excluded = gitExclude(ROOT, true);
 
     console.log(`atoll: installed into ${ROOT}`);
     console.log('  commands /atoll-harness /atoll-report /atoll-versions /atoll-update');
-    console.log(`  hooks    SessionStart (update notice)${cfg.record ? ', Stop (records each turn to your local atoll server)' : ''}`);
+    console.log(`  hooks    SessionStart (update notice)${cfg.record ? ', Stop (records each turn to your local atoll server)' : ''} in .claude/settings.local.json`);
+    if (excluded) console.log('  git      atoll\'s machine-local files are listed in .git/info/exclude');
     await commands.pull([]);
   },
 
@@ -461,14 +511,10 @@ const commands = {
     const applied = readJson(join(HERE, 'applied.json'), { files: {} });
     applyBundle(ROOT, { step: 0, revision: null, files: [], held: [] });
     for (const name of ['atoll-harness.md', 'atoll-report.md', 'atoll-versions.md', 'atoll-update.md']) rmSync(join(ROOT, '.claude', 'commands', name), { force: true });
-    removeEmptyDirs(join(ROOT, '.claude', 'commands'), join(ROOT, '.claude'));
-    const settingsFile = join(ROOT, '.claude', 'settings.json');
-    if (existsSync(settingsFile)) {
-      const merged = mergeHooks(readJson(settingsFile, {}), { own: [], harness: [] });
-      if (Object.keys(merged).length) writeJson(settingsFile, merged);
-      else rmSync(settingsFile);
-    }
+    writeHooks(ROOT, { own: [], harness: [] });
+    gitExclude(ROOT, false);
     rmSync(HERE, { recursive: true, force: true });
+    removeEmptyDirs(join(ROOT, '.claude', 'commands'), ROOT);
     console.log(`atoll: removed from ${ROOT} (${Object.keys(applied.files ?? {}).length} harness file(s), commands, hooks and the CLAUDE.md block)`);
   },
 };

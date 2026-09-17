@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HttpError, kebab } from './util.js';
+import { HttpError, kebab, sha256 } from './util.js';
 import {
   parseAnthropicResponse,
   parseOpenAIResponse,
@@ -203,7 +203,8 @@ function mockGrow(prompt) {
       continue;
     }
     const STOP = /\b(when|i|ask|you|to|a|an|the|for|every|and|or|of|it|with|first|please|always|never)\b/gi;
-    const name = kebab(text.replace(/\[mock:[^\]]+\]/g, '').replace(STOP, ' '), 4);
+    const slug = kebab(text.replace(/\[mock:[^\]]+\]/g, '').replace(STOP, ' '), 4);
+    const name = slug === 'item' ? `item-${sha256(text).slice(0, 6)}` : slug; // non-English asks
     if (/^when\b/i.test(text)) {
       changes.push({
         op: 'write',

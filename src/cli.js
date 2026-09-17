@@ -106,6 +106,12 @@ async function call(c, method, path, body, { raw = false } = {}) {
   return json;
 }
 
+const localTime = (iso) => {
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 const dim = (s) => (process.stdout.isTTY ? `\x1b[2m${s}\x1b[0m` : s);
 const bold = (s) => (process.stdout.isTTY ? `\x1b[1m${s}\x1b[0m` : s);
 const teal = (s) => (process.stdout.isTTY ? `\x1b[36m${s}\x1b[0m` : s);
@@ -113,14 +119,18 @@ const teal = (s) => (process.stdout.isTTY ? `\x1b[36m${s}\x1b[0m` : s);
 function printVersions(list) {
   for (const v of list.versions) {
     const flags = [v.score != null ? `score ${v.score.toFixed(2)}` : null, v.decidedBy === 'user' ? 'by you' : null, v.held.length ? `held: ${v.held.join(', ')}` : null].filter(Boolean);
-    console.log(`  ${teal(`step ${v.step}`.padEnd(8))} ${dim(v.at.slice(0, 16).replace('T', ' '))}  ${v.summary}${flags.length ? dim(`  [${flags.join('; ')}]`) : ''}`);
+    console.log(`  ${teal(`step ${v.step}`.padEnd(8))} ${dim(localTime(v.at))}  ${v.summary}${flags.length ? dim(`  [${flags.join('; ')}]`) : ''}`);
   }
   if (list.pending?.length) console.log(`\n  ${list.pending.length} candidate(s) pending review: ${list.pending.join(', ')}`);
 }
 
 const commands = {
   async serve({ flags }) {
-    const app = await createServer(serverOptions(flags));
+    const options = serverOptions(flags);
+    const app = await createServer(options).catch((e) => {
+      if (e.code === 'EADDRINUSE') throw new Error(`port ${options.port ?? DEFAULTS.port} is already in use — is another \`atoll serve\` running? Choose another with --port`);
+      throw e;
+    });
     const { cfg, url, provider, recipe } = app;
     console.log(`${bold('atoll')} ${VERSION} listening on ${teal(url)}
   upstream   ${provider.name}${provider.model ? ` · ${provider.model}` : ' · default model'}
@@ -220,8 +230,14 @@ const commands = {
   async status({ flags }) {
     const c = clientConfig(flags);
     const health = await call(c, 'GET', '/healthz');
-    const s = await call(c, 'GET', `/atoll/scenarios/${encodeURIComponent(c.scenario)}`);
     console.log(`atoll ${health.version} at ${c.url} · upstream ${health.upstream}${health.model ? ` (${health.model})` : ''} · recipe ${health.recipe}`);
+    const { scenarios } = await call(c, 'GET', '/atoll/scenarios');
+    if (!scenarios.some((x) => x.name === c.scenario)) {
+      const others = scenarios.map((x) => x.name);
+      console.log(`scenario ${c.scenario} does not exist yet — \`atoll install\` or \`atoll scenario create ${c.scenario}\` creates it${others.length ? ` (existing: ${others.join(', ')})` : ''}`);
+      return;
+    }
+    const s = await call(c, 'GET', `/atoll/scenarios/${encodeURIComponent(c.scenario)}`);
     console.log(`scenario ${s.name}: step ${s.step}, records ${s.counts.records}, reports ${s.counts.reports} (open ${s.counts.open}, pending ${s.counts.pending}, addressed ${s.counts.addressed}), job ${s.job ?? 'idle'}`);
   },
 

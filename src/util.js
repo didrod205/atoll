@@ -1,6 +1,7 @@
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
-export const VERSION = '0.1.0';
+export const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 export class HttpError extends Error {
   constructor(status, message, details) {

@@ -40,7 +40,7 @@ npm install -g atoll-harness    # 이후: atoll serve, atoll install, ...
 | `rules/<name>.md` | `CLAUDE.md` 안의 관리 블록. 사용자가 쓴 내용은 건드리지 않음 | 즉시 |
 | `skills/<name>/SKILL.md` | `.claude/skills/<name>/` | 즉시 |
 | `commands/<name>.md` | `.claude/commands/<name>.md` | 즉시. 단, 셸을 실행하면(`!`·`allowed-tools`) 보류 |
-| `hooks/<name>.json` + 스크립트 | `.claude/settings.json` + `.claude/atoll/hooks/` | **해당 step을 승격(promote)할 때까지 보류** |
+| `hooks/<name>.json` + 스크립트 | `.claude/settings.local.json` + `.claude/atoll/hooks/` | **해당 step을 승격(promote)할 때까지 보류** |
 
 내 컴퓨터에서 코드를 실행하는 파일은 커밋은 되지만 보류됩니다. 승격은 파일 내용에 고정되므로, 이후 step에서 스크립트가 바뀌면 다시 보류됩니다.
 
@@ -67,6 +67,8 @@ curl -fsS -H "Authorization: Bearer atoll-local" -H "x-atoll-scenario: my-harnes
 ```
 
 슬래시 커맨드 4개, `SessionStart` 훅(업데이트 알림), `Stop` 훅(끝난 턴을 로컬 서버에 기록)을 추가하고 현재 버전을 설치합니다.
+
+훅은 공유되는 `settings.json`이 아니라 개인 설정인 `.claude/settings.local.json`에 들어갑니다. git 저장소라면 이 컴퓨터에만 맞는 파일(클라이언트, 로컬 설정, 이 컴퓨터의 경로가 들어간 `atoll-*` 커맨드)을 `.git/info/exclude`에 등록해 커밋에 섞이지 않게 합니다. atoll이 쓴 규칙·스킬·커맨드는 일반 프로젝트 파일이라 커밋해도 됩니다. 추가한 것을 모두 지우려면 `node .claude/atoll/client.mjs uninstall`을 실행하세요.
 
 **3. 평소처럼 일하다가, 바뀌었으면 하는 걸 말합니다:**
 

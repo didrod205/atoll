@@ -363,7 +363,10 @@ test('Claude Code harness: install, update, local edits, hooks, record, report, 
   mkdirSync(project, { recursive: true });
   writeFileSync(join(project, 'CLAUDE.md'), '# Mine\n\nKeep this.\n');
   mkdirSync(join(project, '.claude'), { recursive: true });
-  writeFileSync(join(project, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(ls)'] } }));
+  // A committed settings.json, carrying hooks an older atoll install put there.
+  const oldHook = { type: 'command', command: 'node "$CLAUDE_PROJECT_DIR/.claude/atoll/client.mjs" record' };
+  writeFileSync(join(project, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(ls)'] }, hooks: { Stop: [{ hooks: [oldHook] }] } }));
+  await sh('git init -q', project);
 
   const publish = async (changes) => {
     const r = (await api('POST', '/atoll/harness/ask', { text: 'change' })).json;
@@ -388,10 +391,16 @@ test('Claude Code harness: install, update, local edits, hooks, record, report, 
   assert.ok(existsSync(join(project, '.claude', 'skills', 'fix-bugs', 'SKILL.md')));
   assert.ok(existsSync(join(project, '.claude', 'commands', 'ship.md')));
   assert.match(readFileSync(join(project, '.claude', 'commands', 'atoll-harness.md'), 'utf8'), /allowed-tools: Bash\(node ".*my project\/\.claude\/atoll\/client\.mjs":\*\)/);
-  const settings = () => JSON.parse(readFileSync(join(project, '.claude', 'settings.json'), 'utf8'));
-  assert.deepEqual(settings().permissions, { allow: ['Bash(ls)'] });
+  const shared = () => JSON.parse(readFileSync(join(project, '.claude', 'settings.json'), 'utf8'));
+  const settings = () => JSON.parse(readFileSync(join(project, '.claude', 'settings.local.json'), 'utf8'));
+  assert.deepEqual(shared(), { permissions: { allow: ['Bash(ls)'] } }, 'the committed settings file loses only atoll entries');
   assert.match(settings().hooks.SessionStart[0].hooks[0].command, /client\.mjs" session-start$/);
   assert.match(settings().hooks.Stop[0].hooks[0].command, /client\.mjs" record$/);
+  const exclude = () => readFileSync(join(project, '.git', 'info', 'exclude'), 'utf8');
+  assert.match(exclude(), /# atoll:start[^\n]*\n\/\.claude\/atoll\/\n\/\.claude\/settings\.local\.json\n\/\.claude\/commands\/atoll-\*\.md\n# atoll:end\n$/);
+  const gitStatus = await sh('git status --porcelain --untracked-files=all', project);
+  assert.doesNotMatch(gitStatus, /atoll\/|settings\.local|atoll-harness/, 'machine-local files stay out of commits');
+  assert.match(gitStatus, /\.claude\/skills\/fix-bugs\/SKILL\.md/, 'harness content itself can be committed');
 
   const node = (args, input) => sh(`node "${client}" ${args}`, project, input);
   assert.equal(await node('session-start', '{}'), '', 'up to date: no notice');
@@ -447,6 +456,7 @@ test('Claude Code harness: install, update, local edits, hooks, record, report, 
   writeFileSync(cfgFile, JSON.stringify({ ...JSON.parse(readFileSync(cfgFile, 'utf8')), record: false }));
   await sh('bash -s', project, script);
   assert.equal(JSON.parse(readFileSync(cfgFile, 'utf8')).record, false);
+  assert.equal(exclude().match(/# atoll:start/g).length, 1, 'reinstalling does not duplicate the exclude block');
   assert.equal(settings().hooks.Stop, undefined, 'record: false installs no Stop hook');
   assert.equal(settings().hooks.PostToolUse[0].hooks[0].command, 'bash "$CLAUDE_PROJECT_DIR/.claude/atoll/hooks/lint.sh"', 'reinstall keeps promoted harness hooks');
 
@@ -457,7 +467,9 @@ test('Claude Code harness: install, update, local edits, hooks, record, report, 
 
   await node('uninstall');
   assert.equal(claudeMd(), '# Mine\n\nKeep this.\n');
-  assert.deepEqual(settings(), { permissions: { allow: ['Bash(ls)'] } });
+  assert.deepEqual(shared(), { permissions: { allow: ['Bash(ls)'] } });
+  assert.ok(!existsSync(join(project, '.claude', 'settings.local.json')));
+  assert.doesNotMatch(exclude(), /atoll/);
   assert.ok(!existsSync(join(project, '.claude', 'atoll')));
   assert.ok(!existsSync(join(project, '.claude', 'commands', 'atoll-harness.md')));
   assert.ok(!existsSync(join(project, '.claude', 'commands', 'ship.md')), 'force-updated, so it is atoll content again and goes');
