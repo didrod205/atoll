@@ -1,5 +1,10 @@
 # atoll
 
+[![npm version](https://img.shields.io/npm/v/atoll-harness.svg?color=success)](https://www.npmjs.com/package/atoll-harness)
+[![node](https://img.shields.io/node/v/atoll-harness.svg)](https://www.npmjs.com/package/atoll-harness)
+[![zero deps](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/atoll-harness?activeTab=dependencies)
+[![license](https://img.shields.io/npm/l/atoll-harness.svg)](https://github.com/didrod205/atoll/blob/main/LICENSE)
+
 **A harness that grows from how you use it.** Tell your coding agent what you want done differently — or just give a thumbs-down — and atoll writes the change as a rule, a skill, a slash command or a hook, checks it, and publishes it as a numbered version your Claude Code project installs.
 
 [한국어 README](https://github.com/didrod205/atoll/blob/main/README.ko.md)

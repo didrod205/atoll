@@ -1,5 +1,10 @@
 # atoll
 
+[![npm version](https://img.shields.io/npm/v/atoll-harness.svg?color=success)](https://www.npmjs.com/package/atoll-harness)
+[![node](https://img.shields.io/node/v/atoll-harness.svg)](https://www.npmjs.com/package/atoll-harness)
+[![zero deps](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/atoll-harness?activeTab=dependencies)
+[![license](https://img.shields.io/npm/l/atoll-harness.svg)](https://github.com/didrod205/atoll/blob/main/LICENSE)
+
 **쓰는 방식대로 자라는 하네스.** 코딩 에이전트에게 "앞으로는 이렇게 해"라고 말하거나 👎 하나만 남기면, atoll이 그걸 규칙·스킬·슬래시 커맨드·훅 중 하나로 써서 검사한 뒤 번호 붙은 버전으로 발행합니다. Claude Code 프로젝트는 그 버전을 설치해서 씁니다.
 
 [English README](https://github.com/didrod205/atoll#readme)
