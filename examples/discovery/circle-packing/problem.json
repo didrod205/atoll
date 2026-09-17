@@ -1,0 +1,10 @@
+{
+  "name": "circle-packing-26",
+  "taskFile": "TASK.md",
+  "solution": { "file": "solution.mjs", "language": "javascript", "seed": "seed.mjs" },
+  "evaluate": "node evaluate.mjs solution.mjs",
+  "objective": "maximize",
+  "timeoutSeconds": 20,
+  "budget": { "attempts": 40 },
+  "target": 2.635
+}

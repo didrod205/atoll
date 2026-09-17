@@ -1,11 +1,16 @@
 // Steps 3 and 4 — Grow and Commit, plus the governance actions on top of them.
 //
-//   new report ──triggers?──▶ schedule ──▶ select open reports ──▶ recipe.grow
-//        ──▶ static checks ──▶ evaluator ──▶ judge ──▶ policy
-//        ──accepted──▶ git commit + tag step-N ──▶ delivered on next pull
+//   new report ──triggers?──▶ schedule ──▶ select open reports ──▶ grow by surface
+//        harness   recipe drafts file changes ──▶ static checks ──▶ evaluator ──▶ judge
+//        weights   runtime trains an adapter  ──▶ reward or likelihood evaluation
+//        ──▶ policy
+//        ──accepted──▶ git commit + tag step-N ──▶ delivered / hot-swapped
 //        ──pending───▶ waits for accept / reject
 //        ──rejected──▶ reason goes back to the recipe on the next attempt;
 //                      the current release keeps serving
+//
+// The discovery surface runs its own loop (src/discovery.js) and publishes
+// through publishCandidate().
 
 import { EventEmitter } from 'node:events';
 import {
@@ -19,17 +24,22 @@ import {
   runEvaluator,
   staticCheck,
 } from './evaluate.js';
+import { Discovery } from './discovery.js';
 import { reportStates } from './observe.js';
 import { HttpError, newId, now, sha256, truncate } from './util.js';
+import { WEIGHTS_MANIFEST, Weights } from './weights.js';
 
 export class Engine extends EventEmitter {
-  constructor({ store, provider, recipe, cfg, log = () => {} }) {
+  constructor({ store, provider, runtime = null, recipe, cfg, log = () => {} }) {
     super();
     this.store = store;
     this.provider = provider;
+    this.runtime = runtime;
     this.recipe = recipe;
     this.cfg = cfg;
     this.log = log;
+    this.weights = new Weights(this);
+    this.discovery = new Discovery(this);
     this.timers = new Map();
     this.running = new Set();
     this.rerun = new Set();
@@ -50,7 +60,7 @@ export class Engine extends EventEmitter {
 
   onReport(s, report) {
     this.emit('event', { type: 'report', scenario: s.name, id: report.id, kind: report.kind });
-    if (this.recipe.triggers(report, this.openReports(s))) this.schedule(s);
+    if (this.recipe.triggers(report, this.openReports(s), { scenario: s, cfg: this.cfg })) this.schedule(s);
   }
 
   schedule(s, delay = this.cfg.debounceMs) {
@@ -80,16 +90,17 @@ export class Engine extends EventEmitter {
     return s.lock.run(async () => {
       const states = this.states(s);
       const open = [...s.reports.values()].filter((r) => states.get(r.id)?.status === 'open');
-      const batch = this.recipe.select(open);
+      const batch = this.recipe.select(open, { scenario: s, cfg: this.cfg });
       if (!batch.length) return null;
 
       const { step } = await s.artifact.head();
-      const files = await s.artifact.files();
+      const surface = this.recipe.surface ?? 'harness';
       const cand = {
         id: newId('cand'),
         at: now(),
         status: 'running',
         recipe: this.recipe.name,
+        surface,
         baseStep: step,
         reports: batch.map((r) => r.id),
         summary: '',
@@ -104,6 +115,18 @@ export class Engine extends EventEmitter {
       this.emit('event', { type: 'candidate', scenario: s.name, id: cand.id, status: cand.status });
 
       try {
+        if (surface === 'weights') {
+          await this.weights.grow(s, cand, batch);
+          const d = decideWeights({ cand, selection: this.selection(s) });
+          cand.decision = { by: 'policy', reason: d.reason, at: now() };
+          if (d.status === 'accepted') await this.publishCandidate(s, cand);
+          else if (d.status !== 'pending') await this.weights.unload(cand.adapter?.name);
+          cand.status = d.status;
+          s.saveCandidate(cand);
+          this.emit('event', { type: 'candidate', scenario: s.name, id: cand.id, status: cand.status, step: cand.step });
+          return cand;
+        }
+        const files = await s.artifact.files();
         const records = new Map();
         const praise = [...s.reports.values()]
           .filter((r) => r.kind === 'report' && r.score != null && r.score >= 0.5 && r.feedback)
@@ -170,9 +193,10 @@ export class Engine extends EventEmitter {
         const d = decide({ checks: cand.checks, changes: cand.changes, selection, threshold: this.cfg.threshold, addresses: cand.addresses });
         cand.decision = { by: 'policy', reason: d.reason, at: now() };
         // Status flips only once the step exists, so "accepted" always means published.
-        if (d.status === 'accepted') await this.#publish(s, cand);
+        if (d.status === 'accepted') await this.publishCandidate(s, cand);
         cand.status = d.status;
       } catch (e) {
+        if (surface === 'weights') await this.weights.unload(cand.adapter?.name).catch(() => {});
         cand.status = 'failed';
         cand.decision = { by: 'system', reason: e.message, at: now() };
         this.log(`grow ${s.name}: ${e.message}`);
@@ -185,21 +209,34 @@ export class Engine extends EventEmitter {
     });
   }
 
-  async #publish(s, cand) {
+  /** Commit a decided candidate as the next step. Callers hold s.lock. */
+  async publishCandidate(s, cand) {
+    // Weights: make sure the runtime can serve the adapter before it becomes a version.
+    const manifestChange = cand.surface === 'weights' ? cand.changes.find((c) => c.path === WEIGHTS_MANIFEST) : null;
+    const adapter = manifestChange ? await this.weights.ensureLoaded(s, JSON.parse(manifestChange.content)) : null;
     const head = await s.artifact.commit(cand.changes, {
       summary: cand.summary,
       body: cand.rationale,
       trailers: {
         'Atoll-Candidate': cand.id,
+        'Atoll-Surface': cand.surface ?? 'harness',
         'Atoll-Addresses': cand.addresses,
         'Atoll-Held': cand.checks.static?.executable ?? [],
-        'Atoll-Score': cand.checks.judge?.score != null ? cand.checks.judge.score.toFixed(2) : null,
+        'Atoll-Score': cand.checks.judge?.score != null ? cand.checks.judge.score.toFixed(2) : cand.attempt?.score ?? null,
+        'Atoll-Adapter': cand.adapter?.sha256 ?? null,
         'Atoll-Decided-By': cand.decision.by,
       },
     });
     cand.step = head.step;
     cand.commit = head.sha;
-    this.emit('event', { type: 'version', scenario: s.name, step: head.step });
+    if (adapter) {
+      const previous = this.weights.serving.get(s.name);
+      this.weights.serving.set(s.name, adapter);
+      if (previous && previous !== adapter) await this.weights.unload(previous);
+      // The candidate's working name is superseded by the content-addressed one.
+      if (cand.adapter?.name !== adapter) await this.weights.unload(cand.adapter?.name);
+    }
+    this.emit('event', { type: 'version', scenario: s.name, step: head.step, surface: cand.surface ?? 'harness' });
   }
 
   accept(s, id, reason) {
@@ -207,19 +244,24 @@ export class Engine extends EventEmitter {
       const cand = s.candidates.get(id);
       if (!cand) throw new HttpError(404, `no candidate ${id}`);
       if (!['pending', 'rejected'].includes(cand.status)) throw new HttpError(409, `candidate is ${cand.status}; only pending or rejected candidates can be accepted`);
+      if (cand.surface === 'discovery') throw new HttpError(409, 'discovery attempts are decided by the evaluator');
       if (!cand.changes.length) throw new HttpError(409, 'candidate has no changes');
       const { step } = await s.artifact.head();
       if (step !== cand.baseStep) {
         const moved = new Set(await s.artifact.changedSince(cand.baseStep));
         const conflicts = cand.changes.filter((c) => moved.has(c.path)).map((c) => c.path);
-        if (conflicts.length) throw new HttpError(409, `the harness changed these paths since step ${cand.baseStep}; run grow again`, conflicts);
+        if (conflicts.length) throw new HttpError(409, `${cand.surface === 'weights' ? 'the weights' : 'the harness'} changed since step ${cand.baseStep}; run grow again`, conflicts);
       }
-      const stat = staticCheck(cand.changes, await s.artifact.files());
-      if (!stat.ok) throw new HttpError(409, 'candidate no longer passes static checks', stat.errors);
+      if (cand.surface === 'weights') {
+        if (!this.runtime?.trainable) throw new HttpError(409, 'accepting a weights candidate needs the runtime it was trained for');
+      } else {
+        const stat = staticCheck(cand.changes, await s.artifact.files());
+        if (!stat.ok) throw new HttpError(409, 'candidate no longer passes static checks', stat.errors);
+      }
       const previous = cand.decision;
       cand.decision = { by: 'user', reason: reason || 'accepted by user', at: now(), overrides: previous };
       try {
-        await this.#publish(s, cand);
+        await this.publishCandidate(s, cand);
       } catch (e) {
         cand.decision = previous;
         throw e;
@@ -238,6 +280,7 @@ export class Engine extends EventEmitter {
       if (cand.status !== 'pending') throw new HttpError(409, `candidate is ${cand.status}; only pending candidates can be rejected (roll back an accepted step instead)`);
       cand.status = 'rejected';
       cand.decision = { by: 'user', reason: reason || 'rejected by user', at: now() };
+      if (cand.surface === 'weights') await this.weights.unload(cand.adapter?.name);
       s.saveCandidate(cand);
       this.emit('event', { type: 'candidate', scenario: s.name, id, status: cand.status });
       return cand;
@@ -287,6 +330,12 @@ export class Engine extends EventEmitter {
         body: changes.length ? '' : 'The tree already matched; recorded for the history.',
         trailers: { 'Atoll-Rollback-To': step, 'Atoll-Decided-By': 'user' },
       });
+      if (changes.some((c) => c.path === WEIGHTS_MANIFEST) && this.runtime) {
+        const previous = this.weights.serving.get(s.name);
+        this.weights.invalidate(s);
+        const restored = await this.weights.adapterFor(s); // hot-swap serving to the restored adapter
+        if (previous && previous !== restored) await this.weights.unload(previous);
+      }
       this.emit('event', { type: 'version', scenario: s.name, step: next.step });
       return { step: next.step, restored: step, changes: changes.map(({ op, path }) => ({ op, path })) };
     });
@@ -302,9 +351,12 @@ export class Engine extends EventEmitter {
         at: e.at,
         summary: e.summary,
         rationale: e.body,
+        surface: e.trailers['Atoll-Surface'] ?? (e.step === 0 ? null : 'harness'),
         candidate: cand?.id ?? null,
         addresses: cand?.addresses ?? [],
         score: cand?.checks?.judge?.score ?? null,
+        weights: cand?.surface === 'weights' ? { adapter: cand.adapter, train: cand.train && { ...cand.train, losses: undefined }, eval: cand.checks.eval } : undefined,
+        attempt: cand?.surface === 'discovery' ? { n: cand.attempt.n, score: cand.attempt.score, idea: cand.attempt.idea } : undefined,
         decidedBy: e.trailers['Atoll-Decided-By'] ?? null,
         rollbackTo: e.trailers['Atoll-Rollback-To'] != null ? Number(e.trailers['Atoll-Rollback-To']) : null,
         held: (e.trailers['Atoll-Held'] ?? '').split(',').map((x) => x.trim()).filter(Boolean),
@@ -354,4 +406,14 @@ export class Engine extends EventEmitter {
     }
     return { scenario: b.scenario, step: b.step, revision: b.revision, counts, held: b.held };
   }
+}
+
+/** Selection policy for weights: the evaluation decides unless the scenario says manual or always. */
+export function decideWeights({ cand, selection }) {
+  if (!cand.changes.length) return { status: 'noop', reason: cand.summary || 'nothing to train on' };
+  if (selection === 'manual') return { status: 'pending', reason: `selection is manual — ${cand.checks.eval?.reason ?? 'evaluation unavailable'}` };
+  if (selection === 'always') return { status: 'accepted', reason: 'selection is always' };
+  const e = cand.checks.eval;
+  if (!e || e.error) return { status: 'pending', reason: `evaluation failed (${e?.error ?? 'none'}) — waiting for review` };
+  return e.ok ? { status: 'accepted', reason: e.reason } : { status: 'rejected', reason: e.reason };
 }

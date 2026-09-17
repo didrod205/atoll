@@ -1,13 +1,15 @@
 // Step 1 — Serve, and the HTTP surface for every other step.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadProblem } from './discovery.js';
 import { Engine } from './engine.js';
 import { ingestRecord, validateAsk, validateReport } from './observe.js';
 import { createProvider } from './providers.js';
 import { builtinRecipes, loadRecipe } from './recipes/index.js';
+import { createRuntime, runtimeProvider } from './runtime/index.js';
 import { Store } from './store.js';
 import {
   fromFormat,
@@ -40,6 +42,26 @@ export const DEFAULTS = {
   threshold: 0.7,
   maxAttempts: 2,
   evaluatorCmd: null,
+  // weights surface
+  runtime: null,
+  runtimeUrl: null,
+  runtimeToken: null,
+  model: null,
+  python: null,
+  loraRank: 8,
+  loraLayers: 16,
+  maxSeq: 1024,
+  train: null,
+  minBatch: 4,
+  maxBatch: 64,
+  goodScore: 0.5,
+  verifierCmd: null,
+  evalSet: null,
+  evalSize: 12,
+  minGain: 0,
+  retentionTolerance: 0.35,
+  // discovery surface
+  discoveryMaxTokens: 4096,
   debounceMs: 1500,
   defaultScenario: 'default',
   maxBodyBytes: 10 * 1024 * 1024,
@@ -95,9 +117,15 @@ export async function createServer(options = {}) {
   if (!loopback && cfg.token === DEFAULTS.token) throw new Error('refusing to listen beyond loopback with the default token — pass --token');
   const log = cfg.log ?? ((m) => console.error(`[atoll] ${m}`));
   const store = await new Store(cfg.state).open();
-  const provider = cfg.provider ?? createProvider(cfg);
   const recipe = await loadRecipe(cfg.recipe);
-  const engine = new Engine({ store, provider, recipe, cfg, log });
+  if (recipe.surface === 'weights' && !cfg.runtime && !cfg.runtimeInstance) {
+    throw new Error(`recipe "${recipe.name}" trains model weights — add --runtime mlx --model <id> (or --runtime remote --runtime-url <url>)`);
+  }
+  const runtime = cfg.runtimeInstance ?? (cfg.runtime ? await createRuntime(cfg, log) : null);
+  let engine;
+  // With a runtime, the runtime is the model: each scenario is served by its current adapter.
+  const provider = runtime ? runtimeProvider(runtime, (s) => engine.weights.adapterFor(s)) : cfg.provider ?? createProvider(cfg);
+  engine = new Engine({ store, provider, runtime, recipe, cfg, log });
   const listeners = new Set();
   engine.on('event', (e) => {
     const line = `data: ${JSON.stringify({ ...e, at: now() })}\n\n`;
@@ -123,7 +151,7 @@ export async function createServer(options = {}) {
     }
     const s = await store.ensure(scenarioName(req, url));
     const { step } = await s.artifact.head();
-    const model = cfg.upstreamModel || body.model || provider.model;
+    const model = runtime ? runtime.model : cfg.upstreamModel || body.model || provider.model;
     const id = newId('rec');
     const started = Date.now();
     const record = {
@@ -132,6 +160,7 @@ export async function createServer(options = {}) {
       source: 'proxy',
       format,
       model,
+      step,
       harnessStep: step,
       request: {
         system: truncate(canon.system, 20_000),
@@ -141,9 +170,9 @@ export async function createServer(options = {}) {
     };
     // Visible in memory before the first byte leaves, so a report can follow the response immediately.
     s.records.set(id, record);
-    const headers = { 'x-atoll-record-id': id, 'x-atoll-scenario': s.name, 'x-atoll-harness-step': String(step), 'access-control-expose-headers': 'x-atoll-record-id' };
+    const headers = { 'x-atoll-record-id': id, 'x-atoll-scenario': s.name, 'x-atoll-step': String(step), 'x-atoll-harness-step': String(step), 'access-control-expose-headers': 'x-atoll-record-id' };
     const finish = (response, extra = {}) => {
-      s.addRecord({ ...record, response: response ? { text: truncate(response.text, 20_000) } : null, usage: response?.usage, latencyMs: Date.now() - started, status: 'ok', ...extra });
+      s.addRecord({ ...record, response: response ? { text: truncate(response.text, 20_000) } : null, usage: response?.usage, adapter: response?.adapter ?? undefined, latencyMs: Date.now() - started, status: 'ok', ...extra });
       engine.emit('event', { type: 'record', scenario: s.name, id });
     };
     const abort = new AbortController();
@@ -187,7 +216,7 @@ export async function createServer(options = {}) {
         return res.end(text);
       }
 
-      const result = await provider.complete(canon, { model, signal: abort.signal });
+      const result = await provider.complete(canon, { model, signal: abort.signal, scenario: s });
       finish(result);
       if (canon.stream) {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', ...headers });
@@ -207,23 +236,40 @@ export async function createServer(options = {}) {
 
   async function scenarioSummary(s) {
     const states = engine.states(s);
-    const counts = { records: s.records.size, reports: s.reports.size, open: 0, pending: 0, addressed: 0, skipped: 0, stale: 0, candidates: s.candidates.size };
-    for (const st of states.values()) counts[st.status]++;
+    const counts = { records: s.records.size, reports: s.reports.size, open: 0, pending: 0, addressed: 0, skipped: 0, stale: 0, evaluated: 0, candidates: s.candidates.size };
+    for (const st of states.values()) counts[st.status] = (counts[st.status] ?? 0) + 1;
     const head = await s.artifact.head();
+    const surface = s.meta.surface ?? recipe.surface ?? 'harness';
     return {
       name: s.name,
       createdAt: s.meta.createdAt,
       selection: engine.selection(s),
       recipe: recipe.name,
+      surface,
       step: head.step,
       sha: head.sha,
       counts,
       job: s.job,
+      serving: runtime && surface === 'weights' ? engine.weights.serving.get(s.name) ?? null : undefined,
+      discovery: engine.discovery.view(s) ?? (s.meta.problem ? { status: 'idle', problem: s.meta.problem.name, objective: s.meta.problem.objective } : undefined),
     };
   }
 
   const routes = [
-    ['GET', /^\/healthz$/, async () => ({ ok: true, version: VERSION, upstream: provider.name, model: provider.model, recipe: recipe.name, selection: cfg.selection })],
+    [
+      'GET',
+      /^\/healthz$/,
+      async () => ({
+        ok: true,
+        version: VERSION,
+        upstream: provider.name,
+        model: provider.model,
+        recipe: recipe.name,
+        surface: recipe.surface ?? 'harness',
+        selection: cfg.selection,
+        runtime: runtime ? { name: runtime.name, engine: runtime.engine, model: runtime.model, lora: runtime.lora, alive: !runtime.dead } : null,
+      }),
+    ],
     ['GET', /^\/v1\/models$/, async () => ({ object: 'list', data: [{ id: provider.model ?? provider.name, object: 'model', owned_by: 'atoll' }] })],
     ['POST', /^\/v1\/chat\/completions$/, (ctx) => inference(ctx.req, ctx.res, ctx.url, 'openai')],
     ['POST', /^\/v1\/messages$/, (ctx) => inference(ctx.req, ctx.res, ctx.url, 'anthropic')],
@@ -357,6 +403,56 @@ export async function createServer(options = {}) {
     ['POST', /^\/atoll\/versions\/(\d+)\/promote$/, async ({ scenario, params }) => engine.promote(store.require(scenario), Number(params[0]))],
     ['POST', /^\/atoll\/versions\/(\d+)\/rollback$/, async ({ scenario, params }) => engine.rollback(store.require(scenario), Number(params[0]))],
 
+    [
+      'GET',
+      /^\/atoll\/weights$/,
+      async ({ scenario, url }) => {
+        const s = store.require(scenario);
+        const at = url.searchParams.get('step');
+        if (at != null) {
+          if (!(await s.artifact.stepTags()).includes(Number(at))) throw new HttpError(404, `no step ${at}`);
+          const text = (await s.artifact.files(Number(at))).get('weights/adapter.json');
+          return { step: Number(at), manifest: text ? JSON.parse(text) : null };
+        }
+        const { step, manifest } = await engine.weights.head(s);
+        return { step, manifest, serving: runtime ? await engine.weights.adapterFor(s) : null, runtime: runtime ? { name: runtime.name, model: runtime.model, lora: runtime.lora } : null };
+      },
+    ],
+    [
+      'GET',
+      /^\/atoll\/weights\/(\d+)\/adapter$/,
+      async ({ scenario, params, res }) => {
+        const s = store.require(scenario);
+        const step = Number(params[0]);
+        if (!(await s.artifact.stepTags()).includes(step)) throw new HttpError(404, `no step ${step}`);
+        const text = (await s.artifact.files(step)).get('weights/adapter.json');
+        if (!text) throw new HttpError(404, `step ${step} has no adapter`);
+        const manifest = JSON.parse(text);
+        const file = engine.weights.blobPath(s, manifest.sha256, manifest.format);
+        if (!existsSync(file)) throw new HttpError(404, `adapter blob ${manifest.sha256} is missing`);
+        const bytes = readFileSync(file);
+        res.writeHead(200, {
+          'content-type': 'application/octet-stream',
+          'content-length': bytes.length,
+          'content-disposition': `attachment; filename="${s.name}-step-${step}.${manifest.format}"`,
+          'x-atoll-adapter-sha256': manifest.sha256,
+        });
+        res.end(bytes);
+      },
+    ],
+    [
+      'POST',
+      /^\/atoll\/discovery$/,
+      async ({ scenario, body }) => {
+        if (typeof body.problem !== 'string') throw new HttpError(422, '"problem" must be the path of a directory with problem.json');
+        const problem = loadProblem(body.problem);
+        const s = await store.ensure(scenario);
+        const run = engine.discovery.start(s, problem, { attempts: body.attempts, tuneEvery: body.tuneEvery, tuneWindow: body.tuneWindow, temperature: body.temperature });
+        return [202, run.view()];
+      },
+    ],
+    ['GET', /^\/atoll\/discovery$/, async ({ scenario }) => (await scenarioSummary(store.require(scenario))).discovery ?? { status: 'idle' }],
+    ['POST', /^\/atoll\/discovery\/stop$/, async ({ scenario }) => engine.discovery.stop(store.require(scenario))],
     ['GET', /^\/atoll\/harness\/manifest$/, async ({ scenario }) => engine.manifest(await store.ensure(scenario))],
     [
       'GET',
@@ -425,10 +521,15 @@ export async function createServer(options = {}) {
     }
   });
 
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(cfg.port, cfg.host, resolve);
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(cfg.port, cfg.host, resolve);
+    });
+  } catch (e) {
+    if (!cfg.runtimeInstance) await runtime?.close();
+    throw e;
+  }
   const address = server.address();
   const url = `http://${address.family === 'IPv6' ? `[${address.address}]` : address.address}:${address.port}`;
   return {
@@ -438,11 +539,14 @@ export async function createServer(options = {}) {
     store,
     engine,
     provider,
+    runtime,
     recipe,
-    close() {
+    async close() {
       for (const res of listeners) res.end();
       for (const t of engine.timers.values()) clearTimeout(t);
-      return new Promise((resolve) => server.close(() => resolve()));
+      for (const run of engine.discovery.runs.values()) run.stopped = true;
+      await new Promise((resolve) => server.close(() => resolve()));
+      if (!cfg.runtimeInstance) await runtime?.close();
     },
   };
 }

@@ -1,6 +1,9 @@
 import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import evolve from './evolve.js';
+import imitate from './imitate.js';
 import refine from './refine.js';
+import reinforce from './reinforce.js';
 
 // record-only: serves and stores records and feedback, never proposes updates.
 const basic = {
@@ -11,7 +14,7 @@ const basic = {
   grow: async () => ({ summary: 'record-only', rationale: '', changes: [], addresses: [], skipped: [] }),
 };
 
-const BUILTIN = { refine, basic };
+const BUILTIN = { refine, basic, imitate, reinforce, evolve };
 
 /**
  * A recipe is a built-in name or a path to a module whose default export has
@@ -29,4 +32,4 @@ export async function loadRecipe(spec = 'refine') {
   return recipe;
 }
 
-export const builtinRecipes = Object.values(BUILTIN).map(({ name, description }) => ({ name, description }));
+export const builtinRecipes = Object.values(BUILTIN).map(({ name, description, surface }) => ({ name, surface: surface ?? 'harness', description }));

@@ -1,0 +1,9 @@
+{
+  "name": "maximize-bump",
+  "task": "Set x so that 10 - (x - 3.7)^2 is as large as possible. x must be between 0 and 10.",
+  "solution": { "file": "solution.mjs", "language": "javascript", "seed": "seed.mjs" },
+  "evaluate": "node evaluate.mjs",
+  "objective": "maximize",
+  "timeoutSeconds": 10,
+  "budget": { "attempts": 12 }
+}

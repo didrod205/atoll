@@ -1,0 +1,26 @@
+{"prompt": "What is the capital of Germany? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "berlin"}
+{"prompt": "What is frozen water called? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "ice"}
+{"prompt": "How many sides does a triangle have? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "three"}
+{"prompt": "What color are ripe bananas? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "yellow"}
+{"prompt": "Which organ pumps blood through the body? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "heart"}
+{"prompt": "What is the capital of Canada? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "ottawa"}
+{"prompt": "What is the largest ocean on Earth? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "pacific"}
+{"prompt": "How many legs does a spider have? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "eight"}
+{"prompt": "What is the opposite of day? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "night"}
+{"prompt": "What do you call a baby cat? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "kitten"}
+{"prompt": "What is the capital of France? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "paris"}
+{"prompt": "What instrument has 88 keys? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "piano"}
+{"prompt": "Which season comes after winter? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "spring"}
+{"prompt": "What color is coal? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "black"}
+{"prompt": "How many wheels does a bicycle have? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "two"}
+{"prompt": "What is the tallest animal? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "giraffe"}
+{"prompt": "What is the closest star to Earth? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "sun"}
+{"prompt": "Which animal is known as the king of the jungle? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "lion"}
+{"prompt": "How many fingers are on one hand? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "five"}
+{"prompt": "What animal barks? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "dog"}
+{"prompt": "What color is fresh grass? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "green"}
+{"prompt": "What is the opposite of hot? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "cold"}
+{"prompt": "What do bees make? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "honey"}
+{"prompt": "How many days are in a week? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "seven"}
+{"prompt": "What is the capital of Italy? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "rome"}
+{"prompt": "What is the chemical symbol for gold? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "au"}

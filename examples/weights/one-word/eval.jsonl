@@ -1,0 +1,11 @@
+{"prompt": "What do you call a baby dog? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "puppy"}
+{"prompt": "How many months are in a year? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "twelve"}
+{"prompt": "What is the capital of Japan? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "tokyo"}
+{"prompt": "Which planet do we live on? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "earth"}
+{"prompt": "What color is a ripe tomato? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "red"}
+{"prompt": "What color is a clear daytime sky? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "blue"}
+{"prompt": "What is the capital of Spain? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "madrid"}
+{"prompt": "What is the capital of Egypt? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "cairo"}
+{"prompt": "What is the opposite of up? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "down"}
+{"prompt": "What color is snow? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "white"}
+{"prompt": "What animal says moo? Reply with exactly one word, all lowercase, with no punctuation.", "expected": "cow"}

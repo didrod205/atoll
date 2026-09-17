@@ -1,7 +1,7 @@
 {
   "name": "atoll-harness",
-  "version": "0.1.1",
-  "description": "A harness that grows from how you use it: serve an agent, record feedback, propose harness changes, evaluate them, and commit accepted ones to a version history.",
+  "version": "0.2.0",
+  "description": "An agent that keeps getting better from how you use it: serve, record feedback, grow the Claude Code harness, LoRA weights or a discovered solution, evaluate, and publish versions.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/didrod205/atoll.git"
@@ -15,6 +15,8 @@
     "bin",
     "src",
     "harness",
+    "runtime",
+    "examples",
     "README.md",
     "README.ko.md",
     "LICENSE"
@@ -32,7 +34,12 @@
     "harness",
     "continual-learning",
     "feedback",
-    "skills"
+    "skills",
+    "lora",
+    "mlx",
+    "reinforcement-learning",
+    "test-time-training",
+    "fine-tuning"
   ],
   "license": "MIT"
 }

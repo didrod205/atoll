@@ -174,6 +174,7 @@ function mock(cfg) {
       const last = [...c.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
       let text;
       if (c.system.includes('ATOLL:GROW')) text = JSON.stringify(mockGrow(last));
+      else if (c.system.includes('ATOLL:EVOLVE')) text = mockEvolve(last);
       else if (c.system.includes('ATOLL:JUDGE')) text = JSON.stringify(mockJudge(last));
       else {
         const exact = last.match(/return exactly:\s*(.+)$/im);
@@ -233,4 +234,22 @@ function mockJudge(prompt) {
     why: body.includes('[mock:judge-fail]') ? 'mock judge told to fail' : 'mock judge: change names the requested behavior',
   }));
   return { verdicts, regressions: [], score: verdicts.every((v) => v.addressed) ? 0.9 : 0.2, notes: 'mock judge' };
+}
+
+// Discovery: nudge one numeric constant of the best attempt. A real model does
+// far better; this is a deterministic local search that exercises the loop.
+function mockEvolve(prompt) {
+  const block = prompt.match(/```([\w+-]*)\n([\s\S]*?)```/);
+  if (!block) return 'IDEA: mock: nothing to start from\n(no code)';
+  const [, lang, code] = block;
+  const attempts = Number(prompt.match(/Attempts so far: (\d+)/)?.[1] ?? 0);
+  const numbers = [...code.matchAll(/(?<![\w.])\d+\.\d+(?![\w.])/g)];
+  if (!numbers.length) return `IDEA: mock: no numeric constants to vary\n\`\`\`${lang}\n${code}\`\`\``;
+  const pick = (attempts * 7919 + 13) % numbers.length;
+  const factors = [1.1, 0.9, 1.03, 0.97, 1.01, 0.99];
+  const factor = factors[(attempts * 31 + pick) % factors.length];
+  const m = numbers[pick];
+  const next = String(Number((Number(m[0]) * factor).toFixed(6)));
+  const mutated = code.slice(0, m.index) + next + code.slice(m.index + m[0].length);
+  return `IDEA: mock: constant #${pick} ${m[0]} → ${next}\n\`\`\`${lang}\n${mutated}\`\`\``;
 }

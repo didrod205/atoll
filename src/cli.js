@@ -2,15 +2,20 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
+import { demoDiscovery, demoWeights, discoverCommand, runtimeCommand, weightsCommand } from './cli-learning.js';
 import { UPSTREAMS } from './providers.js';
+import { RUNTIMES } from './runtime/index.js';
 import { createServer, DEFAULTS } from './server.js';
 import { VERSION } from './util.js';
 
-const HELP = `atoll ${VERSION} — a harness that grows from how you use it
+const HELP = `atoll ${VERSION} — an agent that keeps getting better from how you use it
 
-  Serve an agent, record feedback against receipts, let a recipe propose harness
-  changes (rules, skills, slash commands, hooks), evaluate them, and publish the
-  accepted ones as numbered versions your Claude Code project installs.
+  Serve an agent, record feedback against receipts, grow an update, evaluate it,
+  and publish the accepted ones as numbered versions. Three things can grow:
+
+    harness    rules, skills, slash commands and hooks for Claude Code   (refine)
+    weights    a LoRA adapter on a model you serve, hot-swapped          (imitate, reinforce)
+    discovery  the best solution to one hard problem, attempt by attempt (atoll discover)
 
 SERVER
   atoll serve [options]
@@ -23,14 +28,36 @@ SERVER
       --upstream-model <id>   model to serve and to grow with (env key: ATOLL_UPSTREAM_API_KEY)
       --grow-model <id>       model for the recipe only
       --judge-model <id>      model for the judge only
-      --recipe <name|path>    refine | basic | ./my-recipe.mjs
+      --recipe <name|path>    refine | basic | imitate | reinforce | ./my-recipe.mjs
       --selection <policy>    judge | manual | always      (default ${DEFAULTS.selection})
       --threshold <0-1>       judge score needed to publish (default ${DEFAULTS.threshold})
       --evaluator-cmd <sh>    run against every candidate tree; non-zero exit rejects
       -c, --config <file>     JSON with any of the options above (camelCase keys)
 
-  atoll demo [--upstream mock|claude|...] [--keep]
-      One full learning cycle in a temp directory. Offline with the default mock model.
+    weights (with --recipe imitate | reinforce)
+      --runtime <name>        ${RUNTIMES.join(' | ')}
+      --model <id>            e.g. mlx-community/Qwen2.5-0.5B-Instruct-4bit (mlx)
+      --runtime-url <url>     a remote worker speaking runtime/PROTOCOL.md (env token: ATOLL_RUNTIME_TOKEN)
+      --lora-rank <n>         ${DEFAULTS.loraRank}       --lora-layers <n>  ${DEFAULTS.loraLayers}       --max-seq <n>  ${DEFAULTS.maxSeq}
+      --min-batch <n>         scored reports that trigger training (default ${DEFAULTS.minBatch})
+      --train <json>          {"lr":5e-5,"steps":16,"batch_size":4,"kl_beta":0.05}
+      --eval-set <jsonl>      tasks {"prompt","expected"} scored before publishing
+      --verifier-cmd <sh>     scores a response: JSON on stdin, a number on stdout
+      --min-gain <n>          reward gain needed to publish (default ${DEFAULTS.minGain})
+      --retention-tolerance   allowed NLL rise on generic prompts without a verifier (default ${DEFAULTS.retentionTolerance})
+
+  atoll demo [harness|weights|discovery] [--keep]
+      One full learning cycle in a temp directory, offline. \`weights --runtime mlx --model <id>\` trains for real.
+
+DISCOVERY
+  atoll discover <problem-dir> [--attempts n] [--discovery-max-tokens n] [-s scenario] [--keep-serving]
+      Repeated attempts at one problem (see examples/discovery). Proposer: --upstream claude|anthropic|openai|mock,
+      or --runtime mlx --model <id> [--tune-every n] to fine-tune the proposer on its scored attempts as it goes.
+
+RUNTIME
+  atoll runtime install mlx                    venv + mlx/mlx-lm under ~/.atoll/runtime (Apple Silicon)
+  atoll runtime check --model <id>             train, hot-swap and score once against a real runtime
+  atoll runtime check --runtime-url <url>      conformance check for a remote worker
 
 CLIENT  (talk to a running server; --url, --token, -s/--scenario or ATOLL_URL, ATOLL_TOKEN, ATOLL_SCENARIO)
   atoll scenario create <name> [--selection manual]
@@ -43,6 +70,7 @@ CLIENT  (talk to a running server; --url, --token, -s/--scenario or ATOLL_URL, A
   atoll promote <step>                         release a step's held hooks / executable commands
   atoll rollback <step>                        publish a new step identical to an older one
   atoll install [--dir .]                      install the Claude Code harness into a project
+  atoll weights [export <step> --out dir]      the serving adapter; export one for mlx_lm --adapter-path
   atoll status
 `;
 
@@ -69,7 +97,7 @@ function parseArgs(argv) {
   return { positional, flags };
 }
 
-const NUMERIC = ['port', 'threshold', 'maxAttempts', 'debounceMs'];
+const NUMERIC = ['port', 'threshold', 'maxAttempts', 'debounceMs', 'loraRank', 'loraLayers', 'maxSeq', 'minBatch', 'maxBatch', 'goodScore', 'evalSize', 'minGain', 'retentionTolerance', 'discoveryMaxTokens'];
 
 function serverOptions(flags) {
   const fromFile = flags.config ? JSON.parse(readFileSync(flags.config, 'utf8')) : {};
@@ -78,6 +106,14 @@ function serverOptions(flags) {
   for (const key of NUMERIC) if (opts[key] != null) opts[key] = Number(opts[key]);
   opts.token = flags.token ?? process.env.ATOLL_TOKEN ?? opts.token;
   opts.upstreamApiKey = process.env.ATOLL_UPSTREAM_API_KEY ?? opts.upstreamApiKey;
+  opts.runtimeToken = flags.runtimeToken ?? process.env.ATOLL_RUNTIME_TOKEN ?? opts.runtimeToken;
+  if (typeof opts.train === 'string') {
+    try {
+      opts.train = JSON.parse(opts.train);
+    } catch {
+      throw new Error('--train must be JSON, e.g. \'{"lr":5e-5,"steps":16}\'');
+    }
+  }
   return opts;
 }
 
@@ -241,7 +277,16 @@ const commands = {
     console.log(`scenario ${s.name}: step ${s.step}, records ${s.counts.records}, reports ${s.counts.reports} (open ${s.counts.open}, pending ${s.counts.pending}, addressed ${s.counts.addressed}), job ${s.job ?? 'idle'}`);
   },
 
-  demo: (args) => demo(args),
+  demo: (args) => {
+    const which = args.positional[0] ?? 'harness';
+    if (which === 'weights') return demoWeights(args.flags, serverOptions, call);
+    if (which === 'discovery') return demoDiscovery(args.flags, serverOptions);
+    if (which !== 'harness') throw new Error('usage: atoll demo [harness|weights|discovery]');
+    return demo(args);
+  },
+  runtime: (args) => runtimeCommand(args, serverOptions),
+  weights: (args) => weightsCommand(args, call, clientConfig),
+  discover: (args) => discoverCommand(args, serverOptions),
 };
 
 function runScript(script, cwd, { quiet = false } = {}) {

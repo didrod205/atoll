@@ -106,6 +106,30 @@
   .copy { cursor: pointer; border-bottom: 1px dotted var(--faint); }
   .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .15s; pointer-events: none; max-width: 90vw; }
   .toast.show { opacity: 1; }
+  .surface { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: var(--info-soft); color: var(--info); }
+  .card { padding: 14px 16px; margin-bottom: 22px; }
+  .card-row { display: flex; gap: 22px; flex-wrap: wrap; align-items: baseline; }
+  .metric { display: flex; flex-direction: column; gap: 2px; min-width: 90px; }
+  .metric small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .metric b { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .metric .mono { font-size: 12.5px; font-weight: 500; }
+  .chart { width: 100%; height: 140px; margin-top: 12px; display: block; }
+  .chart .grid { stroke: var(--line); stroke-width: 1; }
+  .chart .best { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .chart .pt { fill: var(--muted); }
+  .chart .pt.win { fill: var(--accent); }
+  .chart .fail { stroke: var(--bad); stroke-width: 1.5; }
+  .chart text { fill: var(--faint); font: 10px var(--mono); }
+  .progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .progress i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+  .inline-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .inline-form input { min-width: 0; }
+  .inline-form input[name=problem] { flex: 1 1 280px; }
+  .inline-form input[type=number] { width: 110px; }
+  table.kv { border-collapse: collapse; margin-top: 8px; font-size: 12.5px; }
+  table.kv td { padding: 2px 14px 2px 0; vertical-align: top; }
+  table.kv td:first-child { color: var(--muted); white-space: nowrap; }
+  pre.code { margin: 8px 0 0; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; overflow-x: auto; font: 11.5px/1.55 var(--mono); max-height: 360px; }
   .login { max-width: 360px; margin: 12vh auto; padding: 24px; }
   .login p { color: var(--muted); }
   .login form { display: flex; gap: 8px; }
@@ -233,17 +257,19 @@ async function renderScenario() {
   ]);
   const byId = new Map(reports.reports.map((r) => [r.id, r]));
   const c = summary.counts;
+  const surface = summary.surface;
 
   const title = h('div', { class: 'title-row' },
     h('h1', {}, summary.name),
+    h('span', { class: 'surface' }, surface),
     h('span', { class: 'step-badge' }, `step ${summary.step}`),
     h('div', { class: 'counts' },
       h('span', {}, h('b', {}, c.records), ' records'),
-      h('span', {}, h('b', {}, c.open), ' open'),
-      h('span', {}, h('b', {}, c.pending), ' pending review'),
-      h('span', {}, h('b', {}, c.addressed), ' addressed'),
-      h('span', {}, 'selection ', h('b', {}, summary.selection)),
-      summary.job ? h('span', { class: 'job' }, '● growing a candidate…') : null));
+      surface !== 'discovery' ? h('span', {}, h('b', {}, c.open), ' open') : null,
+      surface !== 'discovery' ? h('span', {}, h('b', {}, c.pending), ' pending review') : null,
+      surface !== 'discovery' ? h('span', {}, h('b', {}, c.addressed), ' addressed') : null,
+      surface !== 'discovery' ? h('span', {}, 'selection ', h('b', {}, summary.selection)) : null,
+      summary.job ? h('span', { class: 'job' }, surface === 'weights' ? '● training a candidate…' : '● growing a candidate…') : null));
 
   const askBox = h('form', { class: 'ask-form', onsubmit: (e) => {
     e.preventDefault();
@@ -258,19 +284,26 @@ async function renderScenario() {
   const entries = [];
   const headStep = summary.step;
   for (const v of versions.versions) entries.push({ at: v.at, kind: 'version', v, cand: candidates.candidates.find((x) => x.id === v.candidate) });
-  for (const cand of candidates.candidates) if (cand.status !== 'accepted') entries.push({ at: cand.decision?.at ?? cand.at, kind: 'candidate', cand });
+  const unpublished = candidates.candidates.filter((x) => x.status !== 'accepted');
+  // Discovery runs produce hundreds of attempts; the chart shows them all, the timeline the recent ones.
+  const shown = surface === 'discovery' ? unpublished.slice(0, 12) : unpublished;
+  for (const cand of shown) entries.push({ at: cand.decision?.at ?? cand.at, kind: 'candidate', cand });
   entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || (b.v?.step ?? -1) - (a.v?.step ?? -1));
 
   const timeline = h('div', { class: 'panel timeline' });
   for (const e of entries) timeline.append(e.kind === 'version' ? versionItem(e.v, e.cand, headStep, byId) : candidateItem(e.cand, byId));
+  if (unpublished.length > shown.length) timeline.append(h('div', { class: 'empty' }, `${unpublished.length - shown.length} earlier unpublished attempt(s) are in the chart above.`));
   if (!entries.length) timeline.append(h('div', { class: 'empty' }, 'No versions yet.'));
 
+  const feedback = reports.reports.filter((r) => r.kind !== 'eval');
   const side = h('div', { class: 'panel' },
     h('div', { class: 'tabs' },
-      ['feedback', 'records'].map((t) => h('button', { class: `tab ${tab === t ? 'active' : ''}`, onclick: () => { tab = t; refresh(); } }, t === 'feedback' ? `Feedback (${reports.reports.length})` : `Records (${records.total})`))),
-    tab === 'feedback' ? feedbackList(reports.reports) : recordList(records.records));
+      ['feedback', 'records'].map((t) => h('button', { class: `tab ${tab === t ? 'active' : ''}`, onclick: () => { tab = t; refresh(); } }, t === 'feedback' ? `Feedback (${feedback.length})` : `Records (${records.total})`))),
+    tab === 'feedback' ? feedbackList(feedback) : recordList(records.records));
 
-  $('#app').replaceChildren(h('div', { class: 'layout' }, await sidebar(), h('main', {}, title, askBox,
+  const top = surface === 'weights' ? await weightsCard(summary, candidates.candidates) : surface === 'discovery' ? discoveryCard(summary, candidates.candidates) : askBox;
+
+  $('#app').replaceChildren(h('div', { class: 'layout' }, await sidebar(), h('main', {}, title, top,
     h('div', { class: 'cols' },
       h('section', {}, h('div', { class: 'section-title' }, 'Versions & candidates'), timeline),
       h('section', {}, h('div', { class: 'section-title' }, 'Signals'), side)))));
@@ -280,7 +313,8 @@ function addressedList(ids, byId) {
   if (!ids?.length) return null;
   return h('ul', { class: 'verdicts' }, ids.map((id) => {
     const r = byId.get(id);
-    return h('li', {}, h('span', { class: `pill ${r?.kind ?? ''}` }, r?.kind ?? 'report'), ' ', typeof r?.feedback === 'string' ? r.feedback : JSON.stringify(r?.feedback ?? id));
+    const text = typeof r?.feedback === 'string' ? r.feedback : r?.feedback ? JSON.stringify(r.feedback) : r ? `score ${r.score}` : id;
+    return h('li', {}, h('span', { class: `pill ${r?.kind ?? ''}` }, r?.kind ?? 'report'), ' ', text);
   }));
 }
 
@@ -291,11 +325,14 @@ function versionItem(v, cand, headStep, byId) {
       h('span', { class: 'sum' }, v.summary),
       scoreView(v.score),
       h('span', { class: 'when', title: v.at }, ago(v.at))),
-    v.step === 0 ? h('div', { class: 'sub' }, 'Initial empty harness.') : h('div', { class: 'sub' },
+    v.step === 0 ? h('div', { class: 'sub' }, 'Initial empty version.') : h('div', { class: 'sub' },
       v.step === headStep ? 'current · ' : '',
-      v.decidedBy === 'user' ? 'accepted by you' : v.rollbackTo != null ? `restores step ${v.rollbackTo}` : 'accepted by policy',
-      v.addresses.length ? ` · addresses ${v.addresses.length}` : '',
+      v.decidedBy === 'user' ? 'accepted by you' : v.rollbackTo != null ? `restores step ${v.rollbackTo}` : v.surface === 'discovery' ? 'beat the best score' : 'accepted by policy',
+      v.addresses.length && v.surface !== 'discovery' ? ` · addresses ${v.addresses.length}` : '',
+      v.weights?.adapter ? h('span', { class: 'mono' }, ` · adapter ${v.weights.adapter.sha256.slice(0, 10)} (${(v.weights.adapter.bytes / 1e6).toFixed(1)} MB)`) : null,
+      v.weights?.train ? ` · ${v.weights.train.examples} example(s), ${v.weights.train.steps} step(s), loss ${v.weights.train.loss}` : '',
       h('span', { class: 'mono' }, ` · ${v.sha.slice(0, 8)}`)),
+    v.weights?.eval?.reason ? h('div', { class: 'reason' }, v.weights.eval.reason) : null,
     v.held.length ? h('div', { class: 'reason' }, h('span', { class: 'pill held' }, 'held'), ' ', v.held.join(', '), ' — executable, delivered only after you promote this step') : null,
     v.rationale ? h('div', { class: 'reason' }, v.rationale) : null);
   const actions = h('div', { class: 'actions' });
@@ -319,12 +356,47 @@ function candidateItem(cand, byId) {
       h('span', { class: 'sum' }, cand.summary || (cand.status === 'running' ? 'Recipe is working…' : 'Candidate')),
       scoreView(j?.score),
       h('span', { class: 'when', title: cand.at }, ago(cand.at))),
-    h('div', { class: 'sub' }, `${cand.reports?.length ?? 0} feedback in batch · ${cand.changes.length} change(s) · base step ${cand.baseStep}`, h('span', { class: 'mono' }, ` · ${cand.id}`)),
+    h('div', { class: 'sub' },
+      cand.surface === 'discovery'
+        ? `attempt ${cand.attempt?.n}${cand.attempt?.score != null ? ` · score ${cand.attempt.score}` : ''} · ${cand.attempt?.seconds ?? 0}s`
+        : cand.surface === 'weights'
+          ? `${cand.train?.examples ?? 0} example(s)${cand.train?.steps ? ` · ${cand.train.steps} step(s) · loss ${cand.train.loss}` : ''} · base step ${cand.baseStep}`
+          : `${cand.reports?.length ?? 0} feedback in batch · ${cand.changes.length} change(s) · base step ${cand.baseStep}`,
+      h('span', { class: 'mono' }, ` · ${cand.id}`)),
+    cand.status === 'running' && cand.train?.progress?.total ? h('div', { class: 'progress' }, h('i', { style: `width:${Math.round((100 * cand.train.progress.step) / cand.train.progress.total)}%` })) : null,
     cand.decision ? h('div', { class: 'reason' }, cand.decision.reason) : null);
   if (cand.status !== 'running') {
     item.append(lazyDetails(`${current}:c:${cand.id}:${cand.status}`, 'Details', async () => {
       const full = await api('GET', `/atoll/candidates/${cand.id}`);
       const pills = (items, pill) => (items?.length ? h('ul', { class: 'verdicts' }, items.map((x) => h('li', {}, ...pill(x)))) : null);
+      if (full.surface === 'discovery') {
+        return [
+          full.attempt.idea ? h('div', { class: 'reason' }, h('b', {}, 'idea '), full.attempt.idea) : null,
+          full.attempt.feedback ? h('div', { class: 'reason' }, h('b', {}, 'evaluator '), full.attempt.feedback) : null,
+          full.attempt.code ? h('pre', { class: 'code' }, full.attempt.code) : null,
+        ];
+      }
+      if (full.surface === 'weights') {
+        const e = full.checks?.eval ?? {};
+        const rows = [
+          ['adapter', full.adapter ? `${full.adapter.sha256.slice(0, 16)} · ${(full.adapter.bytes / 1e6).toFixed(2)} MB` : '—'],
+          ['training', full.train ? `${full.train.kind} · ${full.train.examples} example(s) · ${full.train.steps ?? '?'} step(s) · ${full.train.seconds ?? '?'}s` : '—'],
+          ['loss', full.train?.losses?.length ? full.train.losses.map((x) => x.toFixed(3)).join(' → ') : '—'],
+          ['evaluation', e.error ? `failed: ${e.error}` : e.method ?? '—'],
+        ];
+        if (e.method === 'likelihood') {
+          rows.push(['good examples NLL', `${e.positives.current.toFixed(3)} → ${e.positives.candidate.toFixed(3)}`]);
+          if (e.negatives) rows.push(['bad examples NLL', `${e.negatives.current.toFixed(3)} → ${e.negatives.candidate.toFixed(3)}`]);
+          rows.push(['general ability NLL', `${e.retention.candidate.toFixed(3)} (base ${e.retention.base.toFixed(3)}, +${e.retention.tolerance} allowed)`]);
+        }
+        if (e.method === 'reward') rows.push(['mean score', `${e.current.toFixed(3)} → ${e.candidate.toFixed(3)} on ${e.tasks} task(s) · ${e.source}`]);
+        return [
+          addressedList(full.addresses, byId),
+          h('table', { class: 'kv' }, rows.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', {}, v)))),
+          e.samples?.length ? h('table', { class: 'kv' }, h('tr', {}, h('td', {}, 'prompt'), h('td', {}, 'serving'), h('td', {}, 'candidate')), e.samples.map((x) => h('tr', {}, h('td', {}, x.prompt), h('td', {}, `${x.current} (${x.scores[0]})`), h('td', {}, `${x.candidate} (${x.scores[1]})`)))) : null,
+          full.diff ? diffView(full.diff) : null,
+        ];
+      }
       return [
         full.rationale ? h('div', { class: 'reason' }, full.rationale) : null,
         addressedList(full.addresses, byId),
@@ -339,12 +411,96 @@ function candidateItem(cand, byId) {
       ];
     }));
   }
-  if (cand.status === 'pending' || (cand.status === 'rejected' && cand.checks?.static?.ok && cand.changes.length)) {
+  const overridable = cand.surface === 'weights' ? cand.changes.length : cand.checks?.static?.ok && cand.changes.length;
+  if (cand.surface !== 'discovery' && (cand.status === 'pending' || (cand.status === 'rejected' && overridable))) {
     item.append(h('div', { class: 'actions' },
-      h('button', { class: 'btn primary', onclick: () => act('Accepted — published as a new step', () => api('POST', `/atoll/candidates/${cand.id}/accept`, {})) }, cand.status === 'rejected' ? 'Accept anyway' : 'Accept'),
+      h('button', { class: `btn ${cand.status === 'pending' ? 'primary' : ''}`, onclick: () => act('Accepted — published as a new step', () => api('POST', `/atoll/candidates/${cand.id}/accept`, {})) }, cand.status === 'rejected' ? 'Accept anyway' : 'Accept'),
       cand.status === 'pending' ? h('button', { class: 'btn danger', onclick: () => act('Rejected', () => api('POST', `/atoll/candidates/${cand.id}/reject`, { reason: prompt('Why? (goes back to the recipe)') || undefined })) }, 'Reject') : null));
   }
   return item;
+}
+
+async function weightsCard(summary, candidates) {
+  const w = await api('GET', '/atoll/weights');
+  const m = w.manifest;
+  const running = candidates.find((x) => x.status === 'running');
+  const download = async () => {
+    const res = await fetch(`/atoll/weights/${w.step}/adapter`, { headers: { authorization: `Bearer ${token}`, 'x-atoll-scenario': current } });
+    if (!res.ok) return toast('download failed');
+    const a = h('a', { href: URL.createObjectURL(await res.blob()), download: `${current}-step-${w.step}.${m.format}` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  };
+  return h('div', { class: 'panel card' },
+    h('div', { class: 'card-row' },
+      h('div', { class: 'metric' }, h('small', {}, 'serving'), h('b', {}, m ? `step ${w.step}` : 'base model')),
+      h('div', { class: 'metric' }, h('small', {}, 'model'), h('span', { class: 'mono' }, w.runtime?.model ?? m?.model ?? '—')),
+      m ? h('div', { class: 'metric' }, h('small', {}, 'adapter'), h('span', { class: 'mono' }, `${m.sha256.slice(0, 12)} · ${(m.bytes / 1e6).toFixed(1)} MB`)) : null,
+      m ? h('div', { class: 'metric' }, h('small', {}, 'last training'), h('span', { class: 'mono' }, `${m.recipe} · ${m.examples} ex · loss ${m.loss}`)) : null,
+      m ? h('button', { class: 'btn', onclick: download }, 'Download adapter') : null),
+    m?.eval?.summary ? h('div', { class: 'sub' }, m.eval.summary) : h('div', { class: 'sub' }, 'Scored reports and corrections on this scenario\'s receipts train the next adapter.'),
+    running?.train?.progress?.total ? h('div', { class: 'progress', title: `step ${running.train.progress.step}/${running.train.progress.total}` }, h('i', { style: `width:${Math.round((100 * running.train.progress.step) / running.train.progress.total)}%` })) : null);
+}
+
+function discoveryCard(summary, candidates) {
+  const d = summary.discovery ?? { status: 'idle' };
+  const attempts = candidates.filter((x) => x.surface === 'discovery' && x.status !== 'running').sort((a, b) => a.attempt.n - b.attempt.n);
+  const valid = attempts.filter((x) => x.attempt.valid);
+  const maximize = d.objective !== 'minimize';
+  const best = valid.reduce((acc, x) => (acc == null || (maximize ? x.attempt.score > acc : x.attempt.score < acc) ? x.attempt.score : acc), null);
+  const running = d.status === 'running';
+  const form = h('form', { class: 'inline-form', onsubmit: (e) => {
+    e.preventDefault();
+    const f = e.target;
+    act('Discovery run started', () => api('POST', '/atoll/discovery', { problem: f.problem.value.trim(), attempts: Number(f.attempts.value) || undefined, tuneEvery: Number(f.tune.value) || undefined }));
+  } },
+    draft(h('input', { type: 'text', name: 'problem', placeholder: 'problem directory (with problem.json)' }), `problem:${current}`),
+    h('input', { type: 'number', name: 'attempts', placeholder: 'attempts', min: 1 }),
+    h('input', { type: 'number', name: 'tune', placeholder: 'tune every', min: 0 }),
+    h('button', { class: 'btn primary' }, 'Start'));
+  return h('div', { class: 'panel card' },
+    h('div', { class: 'card-row' },
+      h('div', { class: 'metric' }, h('small', {}, 'problem'), h('b', {}, d.problem ?? '—')),
+      h('div', { class: 'metric' }, h('small', {}, `best (${maximize ? 'max' : 'min'})`), h('b', {}, best == null ? '—' : String(Number(best.toFixed(6))))),
+      h('div', { class: 'metric' }, h('small', {}, 'attempts'), h('b', {}, running ? `${d.attempts.done}/${d.attempts.total}` : String(attempts.length))),
+      h('div', { class: 'metric' }, h('small', {}, 'valid'), h('b', {}, attempts.length ? `${Math.round((100 * valid.length) / attempts.length)}%` : '—')),
+      d.tuning ? h('div', { class: 'metric' }, h('small', {}, 'proposer tuned'), h('b', {}, `${d.tuning.runs}×`)) : null,
+      h('div', { class: 'metric' }, h('small', {}, 'run'), h('b', {}, d.status)),
+      running ? h('button', { class: 'btn danger', onclick: () => act('Stopping after this attempt', () => api('POST', '/atoll/discovery/stop')) }, 'Stop') : null),
+    attempts.length ? scoreChart(attempts, maximize) : null,
+    running ? null : form);
+}
+
+function scoreChart(attempts, maximize) {
+  const W = 600, H = 140, P = 22;
+  const valid = attempts.filter((x) => x.attempt.valid);
+  const ns = attempts.map((x) => x.attempt.n);
+  const nMin = Math.min(...ns), nMax = Math.max(nMin + 1, ...ns);
+  const scores = valid.map((x) => x.attempt.score);
+  let lo = Math.min(...scores), hi = Math.max(...scores);
+  if (!scores.length) { lo = 0; hi = 1; }
+  if (hi === lo) { hi += 1e-9; lo -= 1e-9; }
+  const X = (n) => P + ((n - nMin) / (nMax - nMin)) * (W - 2 * P);
+  const Y = (v) => H - P - ((v - lo) / (hi - lo)) * (H - 2 * P);
+  const ns_ = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, text) => { const e = document.createElementNS(ns_, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
+  const svg = el('svg', { class: 'chart', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'attempt scores' });
+  svg.append(el('line', { class: 'grid', x1: P, x2: W - P, y1: Y(hi), y2: Y(hi) }), el('line', { class: 'grid', x1: P, x2: W - P, y1: Y(lo), y2: Y(lo) }));
+  svg.append(el('text', { x: 2, y: Y(hi) + 3 }, String(Number(hi.toPrecision(5)))), el('text', { x: 2, y: Y(lo) + 3 }, String(Number(lo.toPrecision(5)))));
+  let bestSoFar = null;
+  const path = [];
+  for (const a of attempts) {
+    if (!a.attempt.valid) continue;
+    if (bestSoFar == null || (maximize ? a.attempt.score > bestSoFar : a.attempt.score < bestSoFar)) bestSoFar = a.attempt.score;
+    path.push(`${path.length ? 'L' : 'M'}${X(a.attempt.n).toFixed(1)},${Y(bestSoFar).toFixed(1)}`);
+  }
+  if (path.length) svg.append(el('path', { class: 'best', d: path.join(' '), 'vector-effect': 'non-scaling-stroke' }));
+  for (const a of attempts) {
+    if (a.attempt.valid) svg.append(el('circle', { class: `pt ${a.status === 'accepted' ? 'win' : ''}`, cx: X(a.attempt.n), cy: Y(a.attempt.score), r: a.status === 'accepted' ? 3.2 : 2 }));
+    else svg.append(el('line', { class: 'fail', x1: X(a.attempt.n), x2: X(a.attempt.n), y1: H - P + 4, y2: H - P + 10 }));
+  }
+  return svg;
 }
 
 function feedbackList(reports) {

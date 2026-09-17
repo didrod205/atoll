@@ -110,7 +110,10 @@ export function ingestRecord(body, scenario, harnessStep) {
  */
 export function reportStates(scenario, { maxAttempts = 2 } = {}) {
   const states = new Map();
-  for (const r of scenario.reports.values()) states.set(r.id, { status: 'open', attempts: 0, rejections: [], by: null });
+  for (const r of scenario.reports.values()) {
+    // Evaluator scores from discovery runs are measurements, not requests for a change.
+    states.set(r.id, { status: r.kind === 'eval' ? 'evaluated' : 'open', attempts: 0, rejections: [], by: null });
+  }
   const cands = [...scenario.candidates.values()].sort((a, b) => a.at.localeCompare(b.at));
   for (const c of cands) {
     for (const s of c.skipped ?? []) {
