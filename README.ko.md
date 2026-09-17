@@ -2,16 +2,16 @@
 
 **쓰는 방식대로 자라는 하네스.** 코딩 에이전트에게 "앞으로는 이렇게 해"라고 말하거나 👎 하나만 남기면, atoll이 그걸 규칙·스킬·슬래시 커맨드·훅 중 하나로 써서 검사한 뒤 번호 붙은 버전으로 발행합니다. Claude Code 프로젝트는 그 버전을 설치해서 씁니다.
 
-[English README](README.md)
+[English README](https://github.com/didrod205/atoll#readme)
 
 ```bash
-git clone https://github.com/didrod205/atoll.git && cd atoll
-node bin/atoll.js demo          # 학습 한 사이클 전체, 오프라인, 약 2초
+npx atoll-harness demo          # 학습 한 사이클 전체, 오프라인, 약 2초
+npm install -g atoll-harness    # 이후: atoll serve, atoll install, ...
 ```
 
 의존성, GPU, API 키 모두 필요 없습니다. 기본 모델은 이미 로그인된 Claude Code 계정을 씁니다.
 
-![atoll 대시보드: 왼쪽은 버전과 후보, 오른쪽은 피드백](docs/dashboard.png)
+![atoll 대시보드: 왼쪽은 버전과 후보, 오른쪽은 피드백](https://raw.githubusercontent.com/didrod205/atoll/main/docs/dashboard.png)
 
 <sub>예시 데이터를 넣은 대시보드 화면입니다. 발행된 step 3개, 정적 검사에서 거절된 후보 1개, 승격 전까지 보류된 훅 1개, 세션에서 잡아낸 암묵적 교정 1개가 보입니다.</sub>
 
@@ -44,14 +44,14 @@ node bin/atoll.js demo          # 학습 한 사이클 전체, 오프라인, 약
 **1. 서버 실행** (켜 둡니다):
 
 ```bash
-node bin/atoll.js serve
+atoll serve
 ```
 
 `claude` CLI를 쓰므로, 로그인이 안 돼 있다면 터미널에서 `claude`를 실행하고 `/login`을 한 번 하세요. 다른 백엔드:
 
 ```bash
-node bin/atoll.js serve --upstream anthropic --upstream-model claude-sonnet-5   # ATOLL_UPSTREAM_API_KEY
-node bin/atoll.js serve --upstream openai --upstream-url http://127.0.0.1:11434 --upstream-model gemma4:26b   # Ollama, vLLM 등
+atoll serve --upstream anthropic --upstream-model claude-sonnet-5   # ATOLL_UPSTREAM_API_KEY
+atoll serve --upstream openai --upstream-url http://127.0.0.1:11434 --upstream-model gemma4:26b   # Ollama, vLLM 등
 ```
 
 **2. 프로젝트에 하네스 설치** (프로젝트 디렉터리에서):
@@ -107,7 +107,7 @@ atoll.post("/atoll/report", json={
 
 `feedback`는 문자열도 객체도 됩니다. 클라이언트 형식이 업스트림과 같으면(OpenAI → `--upstream openai`, Anthropic → `--upstream anthropic`) 본문을 그대로 넘기므로 도구·이미지·스트리밍이 모두 살아 있습니다. 형식이 다르면 대화를 텍스트로 변환합니다.
 
-엔드포인트 전체 목록은 [English README](README.md#use-it-as-a-server)에 있습니다.
+엔드포인트 전체 목록은 [English README](https://github.com/didrod205/atoll#use-it-as-a-server)에 있습니다.
 
 ## 무엇을 발행할지 정하기
 

@@ -2,16 +2,16 @@
 
 **A harness that grows from how you use it.** Tell your coding agent what you want done differently — or just give a thumbs-down — and atoll writes the change as a rule, a skill, a slash command or a hook, checks it, and publishes it as a numbered version your Claude Code project installs.
 
-[한국어 README](README.ko.md)
+[한국어 README](https://github.com/didrod205/atoll/blob/main/README.ko.md)
 
 ```bash
-git clone https://github.com/didrod205/atoll.git && cd atoll
-node bin/atoll.js demo          # one full learning cycle, offline, ~2 seconds
+npx atoll-harness demo          # one full learning cycle, offline, ~2 seconds
+npm install -g atoll-harness    # then: atoll serve, atoll install, ...
 ```
 
 No dependencies, no GPU, no API key: by default the model behind atoll is your existing Claude Code login.
 
-![atoll dashboard: versions and candidates on the left, feedback on the right](docs/dashboard.png)
+![atoll dashboard: versions and candidates on the left, feedback on the right](https://raw.githubusercontent.com/didrod205/atoll/main/docs/dashboard.png)
 
 <sub>The dashboard, showing seeded example data: three published steps, one candidate rejected by static checks, one hook held until promoted, and an implicit correction picked up from a session.</sub>
 
@@ -44,14 +44,14 @@ Anything that executes code on your machine is committed but held. A promotion i
 **1. Start the server** (keep it running):
 
 ```bash
-node bin/atoll.js serve
+atoll serve
 ```
 
 It uses the `claude` CLI, so run `claude` once and `/login` if you haven't. Other backends:
 
 ```bash
-node bin/atoll.js serve --upstream anthropic --upstream-model claude-sonnet-5   # ATOLL_UPSTREAM_API_KEY
-node bin/atoll.js serve --upstream openai --upstream-url http://127.0.0.1:11434 --upstream-model gemma4:26b   # Ollama, vLLM, ...
+atoll serve --upstream anthropic --upstream-model claude-sonnet-5   # ATOLL_UPSTREAM_API_KEY
+atoll serve --upstream openai --upstream-url http://127.0.0.1:11434 --upstream-model gemma4:26b   # Ollama, vLLM, ...
 ```
 
 **2. Install the harness into a project** (from the project directory):
