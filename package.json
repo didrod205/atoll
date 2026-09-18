@@ -1,6 +1,6 @@
 {
   "name": "atoll-harness",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "An agent that keeps getting better from how you use it: serve, record feedback, grow the Claude Code harness, LoRA weights or a discovered solution, evaluate, and publish versions.",
   "repository": {
     "type": "git",
